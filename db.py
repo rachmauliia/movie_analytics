@@ -8,7 +8,7 @@ DB_CONFIG = {
     "port": 5432,
     "database": "dvdrental",
     "user": "postgres",
-    "password": "rachmaulia03",
+    "password": " your password ",
 }
 
 DATABASE_URL = (
