@@ -1,521 +1,611 @@
 """
-Movie Analytics Dashboard
-app.py — main entry point.
+Movie Analytics Dashboard - Flask Backend
+app.py
 
-Routing:
-  Executive Summary          → rendered inline here (Overview dashboard)
-  content_performance        → pages/content_performance.py
-  genre_audience             → pages/genre_audience.py
-  rental_behavior            → pages/rental_behavior.py
-  actor_cast                 → pages/actor_cast.py
+Endpoints:
+  /api/overview           -> KPI summary
+  /api/monthly_revenue    -> monthly trend
+  /api/top_films          -> top 5 films by revenue
+  /api/revenue_by_rating  -> revenue grouped by rating
+  /api/top_genres         -> top N genres by revenue
+  /api/film_table         -> all films for content table
+  /api/dead_stock         -> dead stock analysis
+  /api/rental_behavior    -> late returns + day + duration + store
+  /api/actors             -> actor leaderboard
 """
 
-import streamlit as st
-from pathlib import Path
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import date
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import psycopg2
+import psycopg2.extras
 
-# ── PAGE CONFIG ────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Movie Analytics Dashboard",
-    page_icon="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>",
-    layout="wide",
-    initial_sidebar_state="expanded",
+app = Flask(__name__)
+CORS(app)  # allow calls from the HTML file
+
+# -----------------------------------------
+# DATABASE CONFIG
+# -----------------------------------------
+DB_CONFIG = dict(
+    host="localhost",
+    database="dvdrental",
+    user="postgres",
+    password="your password",
+    port=5432,
 )
 
-# ── CSS ────────────────────────────────────────────────────────────────────────
-def load_css(path: str):
-    with open(path, encoding="utf-8") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-load_css("styles/main.css")
-
-# ── DB IMPORT ──────────────────────────────────────────────────────────────────
-from db import run_query
-
-# ── OVERVIEW SQL ───────────────────────────────────────────────────────────────
-SQL_OV_TOTALS = """
-SELECT
-    COUNT(DISTINCT f.film_id)                   AS total_films,
-    COUNT(DISTINCT c.customer_id)               AS total_customers,
-    COUNT(r.rental_id)                          AS total_rentals,
-    ROUND(COALESCE(SUM(p.amount), 0), 2)        AS total_revenue,
-    COUNT(DISTINCT i.store_id)                  AS stores,
-    COUNT(DISTINCT f.rating::text)              AS rating_types
-FROM film f
-LEFT JOIN inventory i   ON f.film_id        = i.film_id
-LEFT JOIN rental r      ON i.inventory_id   = r.inventory_id
-LEFT JOIN payment p     ON r.rental_id      = p.rental_id
-LEFT JOIN customer c    ON r.customer_id    = c.customer_id;
-"""
-
-SQL_OV_MONTHLY = """
-SELECT
-    DATE_TRUNC('month', payment_date)::date AS month,
-    ROUND(SUM(amount), 2)                   AS revenue
-FROM payment
-GROUP BY 1
-ORDER BY 1;
-"""
-
-SQL_OV_TOP_FILMS = """
-SELECT
-    f.title,
-    COUNT(r.rental_id)                          AS rental_count,
-    ROUND(COALESCE(SUM(p.amount), 0), 2)        AS revenue
-FROM film f
-JOIN inventory i   ON f.film_id        = i.film_id
-JOIN rental r      ON i.inventory_id   = r.inventory_id
-LEFT JOIN payment p ON r.rental_id     = p.rental_id
-GROUP BY f.title
-ORDER BY revenue DESC
-LIMIT 5;
-"""
-
-SQL_OV_RATING = """
-SELECT
-    f.rating::text                              AS rating,
-    COUNT(r.rental_id)                          AS rentals,
-    ROUND(COALESCE(SUM(p.amount), 0), 2)        AS revenue
-FROM film f
-LEFT JOIN inventory i   ON f.film_id        = i.film_id
-LEFT JOIN rental r      ON i.inventory_id   = r.inventory_id
-LEFT JOIN payment p     ON r.rental_id      = p.rental_id
-GROUP BY f.rating
-ORDER BY revenue DESC;
-"""
-
-SQL_OV_CATEGORY = """
-SELECT
-    c.name                                      AS category,
-    COUNT(r.rental_id)                          AS rentals,
-    ROUND(COALESCE(SUM(p.amount), 0), 2)        AS revenue
-FROM category c
-JOIN film_category fc   ON c.category_id    = fc.category_id
-JOIN film f             ON fc.film_id       = f.film_id
-LEFT JOIN inventory i   ON f.film_id        = i.film_id
-LEFT JOIN rental r      ON i.inventory_id   = r.inventory_id
-LEFT JOIN payment p     ON r.rental_id      = p.rental_id
-GROUP BY c.name
-ORDER BY revenue DESC
-LIMIT 6;
-"""
-
-SQL_OV_DEAD = """
-SELECT COUNT(*) AS dead_count
-FROM film f
-LEFT JOIN inventory i ON f.film_id = i.film_id
-LEFT JOIN rental r    ON i.inventory_id = r.inventory_id
-WHERE r.rental_id IS NULL;
-"""
-
-# ── CACHE OVERVIEW DATA ────────────────────────────────────────────────────────
-@st.cache_data(ttl=300, show_spinner=False)
-def load_overview():
-    tot  = run_query(SQL_OV_TOTALS).iloc[0]
-    mo   = run_query(SQL_OV_MONTHLY)
-    top  = run_query(SQL_OV_TOP_FILMS)
-    rat  = run_query(SQL_OV_RATING)
-    cat  = run_query(SQL_OV_CATEGORY)
-    dead = run_query(SQL_OV_DEAD).iloc[0]["dead_count"]
-    return tot, mo, top, rat, cat, dead
-
-# ── PLOTLY SHARED LAYOUT ───────────────────────────────────────────────────────
-PL = dict(
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(family="Inter, sans-serif", size=11, color="#1a1c2e"),
-    margin=dict(l=10, r=10, t=8, b=8),
-)
-
-# ── SVG ICONS ──────────────────────────────────────────────────────────────────
-# Using simple inline SVGs so there are zero emoji dependencies
-def icon_film(color="#6c5ce7"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="2" y1="17" x2="7" y2="17"/></svg>'
-
-def icon_users(color="#00b894"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'
-
-def icon_dollar(color="#fd9644"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'
-
-def icon_cart(color="#0984e3"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>'
-
-def icon_warn(color="#d63031"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
-
-def icon_trend(color="#6c5ce7"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
-
-def icon_star(color="#fd9644"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
-
-def icon_box(color="#00b894"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>'
-
-def icon_clock(color="#fd79a8"):
-    return f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
-
-def icon_chart(color="#6c5ce7"):
-    return f'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>'
-
-# ── SIDEBAR ────────────────────────────────────────────────────────────────────
-PAGES = {
-    "Executive Summary":            "overview",
-    "Content Performance":          "content_performance",
-    "Genre & Audience Taste":       "genre_audience",
-    "Rental Behavior & Late Return":"rental_behavior",
-    "Actor & Cast Star Power":      "actor_cast",
-}
-
-with st.sidebar:
-    # Brand
-    st.markdown("""
-        <div style="padding:1.6rem 1rem 1.2rem 1rem;border-bottom:1px solid #edeef8;">
-            <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:36px;height:36px;background:linear-gradient(135deg,#6c5ce7,#a29bfe);
-                    border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff"
-                        stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="2" y="2" width="20" height="20" rx="2"/>
-                        <line x1="7" y1="2" x2="7" y2="22"/>
-                        <line x1="17" y1="2" x2="17" y2="22"/>
-                        <line x1="2" y1="12" x2="22" y2="12"/>
-                    </svg>
-                </div>
-                <div>
-                    <div style="font-size:0.95rem;font-weight:700;color:#1a1c2e;">Movie Analytics</div>
-                    <div style="font-size:0.7rem;color:#9da3bd;margin-top:1px;">dvdrental &middot; PostgreSQL</div>
-                </div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown('<div class="nav-section-label" style="color:#9da3bd;font-size:0.67rem;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;padding:1.1rem 1rem 0.4rem 1rem;">Main Menu</div>', unsafe_allow_html=True)
-
-    page = st.radio(
-        label="navigation",
-        options=list(PAGES.keys()),
-        label_visibility="collapsed",
-    )
-
-    st.markdown("""
-        <div style="margin:1.5rem 1rem 0 1rem;background:rgba(108,92,231,0.07);
-            border:1px solid rgba(108,92,231,0.15);border-radius:10px;
-            padding:0.8rem 1rem;font-size:0.75rem;color:#6c5ce7;line-height:1.55;">
-            <span style="font-weight:600;">Tip</span><br>
-            <span style="color:#8a8fa8;">Use the sidebar filters on each feature page to drill into specific data.</span>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown(f"""
-        <p style="font-size:0.67rem;color:#c0c4d8;text-align:center;margin-top:2rem;padding:0 1rem;">
-            Movie Analytics Dashboard &nbsp;&middot;&nbsp; v1.0
-        </p>
-    """, unsafe_allow_html=True)
+def get_conn():
+    """Return a fresh connection (safer than reusing one global conn)."""
+    conn = psycopg2.connect(**DB_CONFIG)
+    conn.autocommit = True
+    return conn
 
 
-# ── ROUTING ────────────────────────────────────────────────────────────────────
-page_key = PAGES[page]
+def query(sql, params=None):
+    """Run a SELECT and return list of dicts."""
+    conn = get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
 
-if page_key == "content_performance":
-    from pages.content_performance import render
-    render()
 
-elif page_key == "genre_audience":
-    from pages.genre_audience import render
-    render()
+def query_one(sql, params=None):
+    rows = query(sql, params)
+    return rows[0] if rows else {}
 
-elif page_key == "rental_behavior":
-    from pages.rental_behavior import render
-    render()
 
-elif page_key == "actor_cast":
-    from pages.actor_cast import render
-    render()
+def to_float(x):
+    return float(x) if x is not None else 0.0
 
-else:
-    # ═══════════════════════════════════════════════════════════════════════════
-    # OVERVIEW DASHBOARD
-    # ═══════════════════════════════════════════════════════════════════════════
 
-    with st.spinner("Loading overview data..."):
-        tot, df_mo, df_top, df_rat, df_cat, dead_count = load_overview()
+# -----------------------------------------
+# OVERVIEW
+# -----------------------------------------
+@app.route("/api/overview")
+def overview():
+    total_revenue = to_float(query_one("SELECT SUM(amount) AS v FROM payment")["v"])
+    total_rentals  = query_one("SELECT COUNT(*) AS v FROM rental")["v"]
+    total_films    = query_one("SELECT COUNT(*) AS v FROM film")["v"]
+    active_customers = query_one(
+        "SELECT COUNT(DISTINCT customer_id) AS v FROM rental"
+    )["v"]
 
-    today_str = date.today().strftime("%A, %B %d, %Y")
+    avg_per_rental = total_revenue / total_rentals if total_rentals else 0
+    avg_per_film   = total_revenue / total_films   if total_films   else 0
 
-    # ── Top bar ────────────────────────────────────────────────────────────────
-    st.markdown(f"""
-        <div class="ov-topbar">
-            <div>
-                <div class="ov-title">Executive Summary</div>
-                <div class="ov-sub">Movie rental performance at a glance</div>
-            </div>
-            <div class="ov-date-chip">{today_str}</div>
-        </div>
-    """, unsafe_allow_html=True)
+    dead_stock = query_one("""
+        SELECT COUNT(*) AS v
+        FROM film f
+        LEFT JOIN inventory i ON f.film_id = i.film_id
+        LEFT JOIN rental r    ON i.inventory_id = r.inventory_id
+        WHERE r.rental_id IS NULL
+    """)["v"]
 
-    # ── Row 1: 4 colored summary cards ────────────────────────────────────────
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(f"""
-            <div class="sc-card purple">
-                <div class="sc-label">Total Revenue</div>
-                <div class="sc-value">${tot['total_revenue']:,.0f}</div>
-                <div class="sc-sub">All-time payment income</div>
-                <div class="sc-wm">$</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"""
-            <div class="sc-card teal">
-                <div class="sc-label">Total Rentals</div>
-                <div class="sc-value">{int(tot['total_rentals']):,}</div>
-                <div class="sc-sub">Total transactions</div>
-                <div class="sc-wm">#</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"""
-            <div class="sc-card orange">
-                <div class="sc-label">Film Catalog</div>
-                <div class="sc-value">{int(tot['total_films']):,}</div>
-                <div class="sc-sub">Unique titles in inventory</div>
-                <div class="sc-wm">F</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with c4:
-        st.markdown(f"""
-            <div class="sc-card blue">
-                <div class="sc-label">Active Customers</div>
-                <div class="sc-value">{int(tot['total_customers']):,}</div>
-                <div class="sc-sub">Customers who rented</div>
-                <div class="sc-wm">C</div>
-            </div>
-        """, unsafe_allow_html=True)
+    return jsonify({
+        "total_revenue":    round(total_revenue, 2),
+        "total_rentals":    int(total_rentals),
+        "total_films":      int(total_films),
+        "active_customers": int(active_customers),
+        "avg_per_rental":   round(avg_per_rental, 2),
+        "avg_per_film":     round(avg_per_film, 2),
+        "dead_stock":       int(dead_stock),
+    })
 
-    st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
-    # ── Row 2: KPI detail cards ────────────────────────────────────────────────
-    k1, k2, k3 = st.columns(3)
-    avg_rev_per_rental = float(tot['total_revenue']) / max(int(tot['total_rentals']), 1)
-    with k1:
-        st.markdown(f"""
-            <div class="kpi-card purple">
-                <div class="kpi-icon-box purple">{icon_trend('#6c5ce7')}</div>
-                <div class="kpi-label">Avg Revenue / Rental</div>
-                <div class="kpi-value">${avg_rev_per_rental:.2f}</div>
-                <div class="kpi-sub">Based on {int(tot['total_rentals']):,} rentals</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with k2:
-        avg_rev_per_film = float(tot['total_revenue']) / max(int(tot['total_films']), 1)
-        st.markdown(f"""
-            <div class="kpi-card teal">
-                <div class="kpi-icon-box teal">{icon_film('#00b894')}</div>
-                <div class="kpi-label">Avg Revenue / Film</div>
-                <div class="kpi-value">${avg_rev_per_film:.2f}</div>
-                <div class="kpi-sub">Across {int(tot['total_films']):,} titles</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with k3:
-        st.markdown(f"""
-            <div class="kpi-card red">
-                <div class="kpi-icon-box red">{icon_warn('#d63031')}</div>
-                <div class="kpi-label">Dead Stock Films</div>
-                <div class="kpi-value">{int(dead_count)}</div>
-                <div class="kpi-sub">Films with zero rentals</div>
-            </div>
-        """, unsafe_allow_html=True)
+# -----------------------------------------
+# MONTHLY REVENUE
+# -----------------------------------------
+@app.route("/api/monthly_revenue")
+def monthly_revenue():
+    rows = query("""
+        SELECT TO_CHAR(payment_date, 'YYYY-MM') AS month,
+               ROUND(SUM(amount)::numeric, 2)   AS revenue
+        FROM payment
+        GROUP BY 1
+        ORDER BY 1
+    """)
+    return jsonify([{"month": r["month"], "revenue": to_float(r["revenue"])} for r in rows])
 
-    st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 
-    # ── Row 3: Revenue trend + Top films + Rating breakdown ───────────────────
-    col_main, col_side = st.columns([2, 1])
+# -----------------------------------------
+# TOP FILMS
+# -----------------------------------------
+@app.route("/api/top_films")
+def top_films():
+    limit = int(request.args.get("limit", 5))
+    rows = query("""
+        SELECT f.title,
+               COUNT(r.rental_id)                     AS rentals,
+               ROUND(COALESCE(SUM(p.amount),0)::numeric, 2) AS revenue
+        FROM film f
+        JOIN inventory i ON f.film_id      = i.film_id
+        JOIN rental r    ON i.inventory_id = r.inventory_id
+        LEFT JOIN payment p ON r.rental_id = p.rental_id
+        GROUP BY f.title
+        ORDER BY revenue DESC
+        LIMIT %s
+    """, (limit,))
+    return jsonify([
+        {"title": r["title"], "rentals": int(r["rentals"]), "revenue": to_float(r["revenue"])}
+        for r in rows
+    ])
 
-    with col_main:
-        # Monthly revenue trend
-        st.markdown('<div class="white-card">', unsafe_allow_html=True)
-        st.markdown('<div class="white-card-title">Monthly Revenue Trend</div>', unsafe_allow_html=True)
-        st.markdown('<div class="white-card-sub">Total payment income per month across all rentals</div>', unsafe_allow_html=True)
 
-        fig_mo = go.Figure()
-        fig_mo.add_trace(go.Scatter(
-            x=df_mo["month"], y=df_mo["revenue"],
-            mode="lines+markers",
-            fill="tozeroy",
-            line=dict(color="#6c5ce7", width=2.5),
-            fillcolor="rgba(108,92,231,0.08)",
-            marker=dict(size=5, color="#6c5ce7"),
-            hovertemplate="<b>%{x}</b><br>Revenue: $%{y:,.2f}<extra></extra>",
-        ))
-        fig_mo.update_layout(
-            **PL,
-            height=220,
-            xaxis=dict(showgrid=False, zeroline=False),
-            yaxis=dict(showgrid=True, gridcolor="#f0f1f8", zeroline=False),
-        )
-        st.plotly_chart(fig_mo, width='stretch', config={"displayModeBar": False})
-        st.markdown('</div>', unsafe_allow_html=True)
+# -----------------------------------------
+# REVENUE BY RATING
+# -----------------------------------------
+@app.route("/api/revenue_by_rating")
+def revenue_by_rating():
+    rows = query("""
+        SELECT f.rating::text                               AS rating,
+               COUNT(r.rental_id)                          AS rentals,
+               ROUND(COALESCE(SUM(p.amount),0)::numeric,2) AS revenue
+        FROM film f
+        LEFT JOIN inventory i ON f.film_id      = i.film_id
+        LEFT JOIN rental r    ON i.inventory_id = r.inventory_id
+        LEFT JOIN payment p   ON r.rental_id    = p.rental_id
+        GROUP BY f.rating
+        ORDER BY revenue DESC
+    """)
+    return jsonify([
+        {"rating": r["rating"], "rentals": int(r["rentals"]), "revenue": to_float(r["revenue"])}
+        for r in rows
+    ])
 
-    with col_side:
-        # Top 5 films milestone list
-        st.markdown('<div class="white-card" style="height:100%;box-sizing:border-box;">', unsafe_allow_html=True)
-        st.markdown('<div class="white-card-title">Top 5 Films by Revenue</div>', unsafe_allow_html=True)
-        st.markdown('<div class="white-card-sub">Highest earning titles</div>', unsafe_allow_html=True)
 
-        max_rev = df_top["revenue"].max() if not df_top.empty else 1
-        dot_colors = ["#6c5ce7", "#00b894", "#fd9644", "#0984e3", "#fd79a8"]
+# -----------------------------------------
+# TOP GENRES
+# -----------------------------------------
+@app.route("/api/top_genres")
+def top_genres():
+    limit = int(request.args.get("limit", 10))
+    rows = query("""
+        SELECT c.name                                       AS category,
+               COUNT(r.rental_id)                          AS rentals,
+               ROUND(COALESCE(SUM(p.amount),0)::numeric,2) AS revenue
+        FROM category c
+        JOIN film_category fc ON c.category_id  = fc.category_id
+        JOIN film f           ON fc.film_id      = f.film_id
+        LEFT JOIN inventory i ON f.film_id       = i.film_id
+        LEFT JOIN rental r    ON i.inventory_id  = r.inventory_id
+        LEFT JOIN payment p   ON r.rental_id     = p.rental_id
+        GROUP BY c.name
+        ORDER BY revenue DESC
+        LIMIT %s
+    """, (limit,))
+    return jsonify([
+        {"category": r["category"], "rentals": int(r["rentals"]), "revenue": to_float(r["revenue"])}
+        for r in rows
+    ])
 
-        for i, row in df_top.iterrows():
-            pct = int(row["revenue"] / max_rev * 100)
-            color = dot_colors[i % len(dot_colors)]
-            st.markdown(f"""
-                <div class="ms-row">
-                    <div class="ms-dot" style="background:{color};"></div>
-                    <div>
-                        <div class="ms-text" style="font-size:0.78rem;">{row['title']}</div>
-                        <div class="ms-sub">{int(row['rental_count'])} rentals</div>
-                    </div>
-                    <div class="ms-bar-wrap">
-                        <div class="ms-bar" style="width:{pct}%;background:{color};"></div>
-                    </div>
-                    <div class="ms-pct" style="color:{color};">${row['revenue']:,.0f}</div>
-                </div>
-            """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
-
-    # ── Row 4: Rating donut + Category bar + Genre milestone ──────────────────
-    col_a, col_b = st.columns([1, 1])
-
-    with col_a:
-        st.markdown('<div class="white-card">', unsafe_allow_html=True)
-        st.markdown('<div class="white-card-title">Revenue by Rating</div>', unsafe_allow_html=True)
-        st.markdown('<div class="white-card-sub">Which rating tier generates the most income</div>', unsafe_allow_html=True)
-
-        rating_colors_map = {
-            "G": "#1e8449", "PG": "#1a5276", "PG-13": "#d68910",
-            "R": "#c0392b", "NC-17": "#6c3483",
+# -----------------------------------------
+# FILM TABLE (Content Performance)
+# -----------------------------------------
+@app.route("/api/film_table")
+def film_table():
+    rows = query("""
+        SELECT f.title,
+               f.rating::text                              AS rating,
+               COUNT(r.rental_id)                         AS rentals,
+               ROUND(COALESCE(SUM(p.amount),0)::numeric,2) AS revenue
+        FROM film f
+        LEFT JOIN inventory i ON f.film_id      = i.film_id
+        LEFT JOIN rental r    ON i.inventory_id = r.inventory_id
+        LEFT JOIN payment p   ON r.rental_id    = p.rental_id
+        GROUP BY f.title, f.rating
+        ORDER BY revenue DESC
+    """)
+    return jsonify([
+        {
+            "title":   r["title"],
+            "rating":  r["rating"],
+            "rentals": int(r["rentals"]),
+            "revenue": to_float(r["revenue"]),
         }
-        fig_rat = px.pie(
-            df_rat, names="rating", values="revenue",
-            color="rating", color_discrete_map=rating_colors_map,
-            hole=0.55,
+        for r in rows
+    ])
+
+
+# -----------------------------------------
+# DEAD STOCK
+# -----------------------------------------
+@app.route("/api/dead_stock")
+def dead_stock_detail():
+    rented = query_one("""
+        SELECT COUNT(DISTINCT f.film_id) AS v
+        FROM film f
+        JOIN inventory i ON f.film_id      = i.film_id
+        JOIN rental r    ON i.inventory_id = r.inventory_id
+    """)["v"]
+
+    by_rating = query("""
+        SELECT f.rating::text AS rating, COUNT(*) AS count
+        FROM film f
+        LEFT JOIN inventory i ON f.film_id      = i.film_id
+        LEFT JOIN rental r    ON i.inventory_id = r.inventory_id
+        WHERE r.rental_id IS NULL
+        GROUP BY f.rating
+        ORDER BY count DESC
+    """)
+
+    return jsonify({
+        "rented":    int(rented),
+        "by_rating": [{"rating": r["rating"], "count": int(r["count"])} for r in by_rating],
+    })
+
+
+# -----------------------------------------
+# RENTAL BEHAVIOR
+# -----------------------------------------
+@app.route("/api/rental_behavior")
+def rental_behavior():
+    # Late returns (only completed rentals that have a return_date)
+    late_row = query_one("""
+        SELECT
+            COUNT(*) FILTER (WHERE return_date > rental_date + INTERVAL '1 day' * (
+                SELECT rental_duration FROM film f
+                JOIN inventory i ON f.film_id = i.film_id
+                WHERE i.inventory_id = r.inventory_id
+                LIMIT 1
+            )) AS late,
+            COUNT(*) AS total
+        FROM rental r
+        WHERE return_date IS NOT NULL
+    """)
+
+    # Rentals by day of week
+    days = query("""
+        SELECT TO_CHAR(rental_date, 'Dy') AS day,
+               COUNT(*) AS rentals
+        FROM rental
+        GROUP BY day
+        ORDER BY MIN(EXTRACT(DOW FROM rental_date))
+    """)
+
+    # Rental duration distribution
+    duration = query("""
+        SELECT
+            LEAST(EXTRACT(DAY FROM (return_date - rental_date))::int, 8) AS days,
+            COUNT(*) AS rentals
+        FROM rental
+        WHERE return_date IS NOT NULL
+        GROUP BY 1
+        ORDER BY 1
+    """)
+
+    # Late returns by store
+    store_late = query("""
+        SELECT
+            i.store_id,
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE r.return_date > r.rental_date + INTERVAL '1 day' * (
+                SELECT f2.rental_duration FROM film f2
+                JOIN inventory i2 ON f2.film_id = i2.film_id
+                WHERE i2.inventory_id = r.inventory_id
+                LIMIT 1
+            )) AS late
+        FROM rental r
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        WHERE r.return_date IS NOT NULL
+        GROUP BY i.store_id
+        ORDER BY i.store_id
+    """)
+
+    store_late_out = []
+    for s in store_late:
+        t = int(s["total"])
+        l = int(s["late"]) if s["late"] else 0
+        rate = round(l / t * 100, 1) if t else 0
+        store_late_out.append({"store_id": s["store_id"], "total": t, "late": l, "rate": rate})
+
+    return jsonify({
+        "late": {"late": int(late_row.get("late") or 0), "total": int(late_row.get("total") or 0)},
+        "days": [{"day": r["day"], "rentals": int(r["rentals"])} for r in days],
+        "duration": [{"days": int(r["days"]), "rentals": int(r["rentals"])} for r in duration],
+        "store_late": store_late_out,
+    })
+
+
+# -----------------------------------------
+# ACTORS
+# -----------------------------------------
+@app.route("/api/actors")
+def actors():
+    limit = int(request.args.get("limit", 20))
+    rows = query("""
+        SELECT
+            a.first_name || ' ' || a.last_name             AS name,
+            COUNT(DISTINCT fa.film_id)                      AS films,
+            COUNT(r.rental_id)                              AS rentals,
+            ROUND(COALESCE(SUM(p.amount),0)::numeric, 2)   AS revenue
+        FROM actor a
+        JOIN film_actor fa  ON a.actor_id     = fa.actor_id
+        JOIN film f         ON fa.film_id     = f.film_id
+        LEFT JOIN inventory i ON f.film_id    = i.film_id
+        LEFT JOIN rental r    ON i.inventory_id = r.inventory_id
+        LEFT JOIN payment p   ON r.rental_id  = p.rental_id
+        GROUP BY a.actor_id, a.first_name, a.last_name
+        ORDER BY revenue DESC
+        LIMIT %s
+    """, (limit,))
+    return jsonify([
+        {
+            "name":    r["name"],
+            "films":   int(r["films"]),
+            "rentals": int(r["rentals"]),
+            "revenue": to_float(r["revenue"]),
+        }
+        for r in rows
+    ])
+
+
+# -----------------------------------------
+# RENTAL TRENDS (monthly rental count — for overview dual-view)
+# -----------------------------------------
+@app.route("/api/rental_trends")
+def rental_trends():
+    rows = query("""
+        SELECT TO_CHAR(rental_date, 'YYYY-MM') AS month,
+               COUNT(*) AS rentals
+        FROM rental
+        GROUP BY 1
+        ORDER BY 1
+    """)
+    return jsonify([{"month": r["month"], "rentals": int(r["rentals"])} for r in rows])
+
+
+# -----------------------------------------
+# TIME SERIES ANALYSIS (combined revenue + rentals per month)
+# -----------------------------------------
+@app.route("/api/time_series_analysis")
+def time_series_analysis():
+    rows = query("""
+        SELECT
+            TO_CHAR(p.payment_date, 'YYYY-MM')          AS period,
+            ROUND(SUM(p.amount)::numeric, 2)             AS revenue,
+            COUNT(DISTINCT r.rental_id)                  AS rentals,
+            COUNT(DISTINCT p.customer_id)                AS customers
+        FROM payment p
+        JOIN rental r ON p.rental_id = r.rental_id
+        GROUP BY 1
+        ORDER BY 1
+    """)
+    return jsonify([
+        {
+            "period":    r["period"],
+            "revenue":   to_float(r["revenue"]),
+            "rentals":   int(r["rentals"]),
+            "customers": int(r["customers"]),
+        }
+        for r in rows
+    ])
+
+
+# -----------------------------------------
+# REVENUE GROWTH (month-over-month % growth)
+# -----------------------------------------
+@app.route("/api/revenue_growth")
+def revenue_growth():
+    rows = query("""
+        WITH monthly AS (
+            SELECT TO_CHAR(payment_date, 'YYYY-MM') AS month,
+                   ROUND(SUM(amount)::numeric, 2)   AS revenue
+            FROM payment
+            GROUP BY 1
+            ORDER BY 1
         )
-        fig_rat.update_traces(
-            textposition="outside", textinfo="percent+label",
-            hovertemplate="<b>%{label}</b><br>$%{value:,.2f}<extra></extra>",
-        )
-        fig_rat.update_layout(**PL, height=240, showlegend=False)
-        st.plotly_chart(fig_rat, width='stretch', config={"displayModeBar": False})
-
-        # Rating legend with short descriptions
-        st.markdown("""
-            <div style="margin-top:0.5rem;padding:0.65rem 0.85rem;background:#f8f9fc;border-radius:8px;border:1px solid #edeef8;">
-                <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#9da3bd;margin-bottom:0.45rem;">Rating Guide</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 1rem;">
-                    <div style="display:flex;align-items:center;gap:0.4rem;">
-                        <span style="width:10px;height:10px;border-radius:50%;background:#1e8449;flex-shrink:0;"></span>
-                        <span style="font-size:0.72rem;color:#374151;"><strong>G</strong> — All ages</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.4rem;">
-                        <span style="width:10px;height:10px;border-radius:50%;background:#1a5276;flex-shrink:0;"></span>
-                        <span style="font-size:0.72rem;color:#374151;"><strong>PG</strong> — Parental guidance</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.4rem;">
-                        <span style="width:10px;height:10px;border-radius:50%;background:#d68910;flex-shrink:0;"></span>
-                        <span style="font-size:0.72rem;color:#374151;"><strong>PG-13</strong> — 13 years and above</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.4rem;">
-                        <span style="width:10px;height:10px;border-radius:50%;background:#c0392b;flex-shrink:0;"></span>
-                        <span style="font-size:0.72rem;color:#374151;"><strong>R</strong> — 17 years and above</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.4rem;">
-                        <span style="width:10px;height:10px;border-radius:50%;background:#6c3483;flex-shrink:0;"></span>
-                        <span style="font-size:0.72rem;color:#374151;"><strong>NC-17</strong> — 18 years and above</span>
-                    </div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_b:
-        st.markdown('<div class="white-card">', unsafe_allow_html=True)
-        st.markdown('<div class="white-card-title">Top Genres by Revenue</div>', unsafe_allow_html=True)
-        st.markdown('<div class="white-card-sub">Revenue contribution from the top 6 categories</div>', unsafe_allow_html=True)
-
-        genre_colors = ["#6c5ce7","#00b894","#fd9644","#0984e3","#fd79a8","#a29bfe"]
-        max_cat = df_cat["revenue"].max() if not df_cat.empty else 1
-        for i, row in df_cat.iterrows():
-            pct = int(row["revenue"] / max_cat * 100)
-            color = genre_colors[i % len(genre_colors)]
-            st.markdown(f"""
-                <div class="ms-row">
-                    <div class="ms-dot" style="background:{color};"></div>
-                    <div style="flex:1;min-width:0;">
-                        <div class="ms-text">{row['category']}</div>
-                        <div class="ms-sub">{int(row['rentals'])} rentals</div>
-                    </div>
-                    <div class="ms-bar-wrap" style="width:80px;">
-                        <div class="ms-bar" style="width:{pct}%;background:{color};"></div>
-                    </div>
-                    <div class="ms-pct" style="color:{color};">${row['revenue']:,.0f}</div>
-                </div>
-            """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
-
-    # ── Row 5: Feature shortcuts ───────────────────────────────────────────────
-    st.markdown('<div class="section-title">Explore Features</div>', unsafe_allow_html=True)
-
-    f1, f2, f3, f4 = st.columns(4)
-    features = [
+        SELECT
+            month,
+            revenue,
+            LAG(revenue) OVER (ORDER BY month) AS prev_revenue,
+            CASE
+                WHEN LAG(revenue) OVER (ORDER BY month) IS NULL THEN NULL
+                WHEN LAG(revenue) OVER (ORDER BY month) = 0     THEN NULL
+                ELSE ROUND(
+                    ((revenue - LAG(revenue) OVER (ORDER BY month))
+                     / LAG(revenue) OVER (ORDER BY month) * 100)::numeric, 1)
+            END AS growth_pct
+        FROM monthly
+    """)
+    return jsonify([
         {
-            "col": f1, "color": "purple",
-            "svg": icon_chart('#6c5ce7'),
-            "title": "Content Performance",
-            "desc": "Top & bottom films, ROI analysis, dead stock, and rating profitability.",
-            "status": "live",
-        },
+            "month":       r["month"],
+            "revenue":     to_float(r["revenue"]),
+            "prev_revenue":to_float(r["prev_revenue"]) if r["prev_revenue"] else None,
+            "growth_pct":  float(r["growth_pct"]) if r["growth_pct"] is not None else None,
+        }
+        for r in rows
+    ])
+
+
+# -----------------------------------------
+# SEASONAL DEMAND (aggregate rentals by calendar month 1-12)
+# -----------------------------------------
+@app.route("/api/seasonal_demand")
+def seasonal_demand():
+    rows = query("""
+        SELECT
+            TO_CHAR(DATE_TRUNC('month', rental_date), 'Mon') AS month,
+            EXTRACT(MONTH FROM rental_date)::int              AS month_num,
+            COUNT(*)                                          AS rentals
+        FROM rental
+        GROUP BY month, month_num
+        ORDER BY month_num
+    """)
+    if not rows:
+        return jsonify([])
+    avg_rentals = sum(r["rentals"] for r in rows) / len(rows)
+    return jsonify([
         {
-            "col": f2, "color": "teal",
-            "svg": icon_star('#00b894'),
-            "title": "Genre & Audience Taste",
-            "desc": "Which genres drive rentals, audience preferences by rating and category.",
-            "status": "live",
-        },
+            "month":   r["month"],
+            "rentals": int(r["rentals"]),
+            "avg":     round(avg_rentals, 1),
+        }
+        for r in rows
+    ])
+
+
+# -----------------------------------------
+# CUSTOMER BEHAVIOR (unique active customers per month)
+# -----------------------------------------
+@app.route("/api/customer_behavior")
+def customer_behavior():
+    rows = query("""
+        SELECT TO_CHAR(rental_date, 'YYYY-MM') AS month,
+               COUNT(DISTINCT customer_id)     AS active_customers
+        FROM rental
+        GROUP BY 1
+        ORDER BY 1
+    """)
+    return jsonify([
+        {"month": r["month"], "active_customers": int(r["active_customers"])}
+        for r in rows
+    ])
+
+
+# -----------------------------------------
+# GENRE TRENDS (top 5 genres, monthly rental counts — pivot-style)
+# -----------------------------------------
+@app.route("/api/genre_trends")
+def genre_trends():
+    # Get top 5 genres by total rentals
+    top_genres = query("""
+        SELECT c.name AS genre
+        FROM category c
+        JOIN film_category fc ON c.category_id = fc.category_id
+        JOIN film f           ON fc.film_id     = f.film_id
+        LEFT JOIN inventory i ON f.film_id      = i.film_id
+        LEFT JOIN rental r    ON i.inventory_id = r.inventory_id
+        GROUP BY c.name
+        ORDER BY COUNT(r.rental_id) DESC
+        LIMIT 5
+    """)
+    genre_names = [g["genre"] for g in top_genres]
+
+    # Monthly counts per genre
+    raw = query("""
+        SELECT TO_CHAR(r.rental_date, 'YYYY-MM') AS month,
+               c.name AS genre,
+               COUNT(r.rental_id) AS rentals
+        FROM rental r
+        JOIN inventory i      ON r.inventory_id  = i.inventory_id
+        JOIN film f           ON i.film_id        = f.film_id
+        JOIN film_category fc ON f.film_id        = fc.film_id
+        JOIN category c       ON fc.category_id  = c.category_id
+        WHERE c.name = ANY(%s)
+        GROUP BY 1, 2
+        ORDER BY 1
+    """, (genre_names,))
+
+    # Pivot into {month, Genre1: N, Genre2: N, ...}
+    from collections import defaultdict
+    month_map = defaultdict(lambda: {g: 0 for g in genre_names})
+    for r in raw:
+        month_map[r["month"]][r["genre"]] = int(r["rentals"])
+
+    data = [{"month": m, **counts} for m, counts in sorted(month_map.items())]
+    return jsonify({"genres": genre_names, "data": data})
+
+
+# -----------------------------------------
+# COMPLEX CUSTOMER QUERY
+# /api/customer_query?min_cost=100&sort=cost&limit=50
+# Returns customers whose total rental spend >= min_cost
+# -----------------------------------------
+@app.route("/api/customer_query")
+def customer_query():
+    min_cost  = float(request.args.get("min_cost", 0))
+    sort_by   = request.args.get("sort", "cost")   # cost | rentals | name
+    limit     = int(request.args.get("limit", 100))
+
+    sort_col  = {
+        "cost":    "total_cost DESC",
+        "rentals": "total_rentals DESC",
+        "name":    "customer_name ASC",
+    }.get(sort_by, "total_cost DESC")
+
+    rows = query(f"""
+        SELECT
+            c.customer_id,
+            c.first_name || ' ' || c.last_name              AS customer_name,
+            c.email,
+            ci.city,
+            co.country,
+            COUNT(DISTINCT r.rental_id)                      AS total_rentals,
+            ROUND(COALESCE(SUM(p.amount), 0)::numeric, 2)   AS total_cost,
+            MAX(r.rental_date)                               AS last_rental
+        FROM customer c
+        JOIN address a   ON c.address_id   = a.address_id
+        JOIN city ci     ON a.city_id      = ci.city_id
+        JOIN country co  ON ci.country_id  = co.country_id
+        LEFT JOIN rental r    ON c.customer_id = r.customer_id
+        LEFT JOIN payment p   ON r.rental_id   = p.rental_id
+        GROUP BY c.customer_id, c.first_name, c.last_name, c.email, ci.city, co.country
+        HAVING ROUND(COALESCE(SUM(p.amount), 0)::numeric, 2) >= %s
+        ORDER BY {sort_col}
+        LIMIT %s
+    """, (min_cost, limit))
+
+    return jsonify([
         {
-            "col": f3, "color": "orange",
-            "svg": icon_clock('#fd9644'),
-            "title": "Rental Behavior",
-            "desc": "Late returns, peak rental periods, rental duration patterns and trends.",
-            "status": "live",
-        },
+            "customer_id":   r["customer_id"],
+            "customer_name": r["customer_name"],
+            "email":         r["email"],
+            "city":          r["city"],
+            "country":       r["country"],
+            "total_rentals": int(r["total_rentals"]),
+            "total_cost":    to_float(r["total_cost"]),
+            "last_rental":   str(r["last_rental"])[:10] if r["last_rental"] else "-",
+        }
+        for r in rows
+    ])
+
+
+# -----------------------------------------
+# MONTHLY REVENUE EXTENDED (for prediction)
+# /api/monthly_revenue_extended
+# Returns monthly revenue + basic stats for frontend ML
+# -----------------------------------------
+@app.route("/api/monthly_revenue_extended")
+def monthly_revenue_extended():
+    rows = query("""
+        SELECT TO_CHAR(payment_date, 'YYYY-MM') AS month,
+               ROUND(SUM(amount)::numeric, 2)   AS revenue,
+               COUNT(*)                          AS transactions,
+               COUNT(DISTINCT customer_id)       AS unique_customers
+        FROM payment
+        GROUP BY 1
+        ORDER BY 1
+    """)
+    return jsonify([
         {
-            "col": f4, "color": "pink",
-            "svg": icon_star('#fd79a8'),
-            "title": "Actor & Cast Power",
-            "desc": "Which actors and casts drive the most rentals and revenue.",
-            "status": "live",
-        },
+            "month":            r["month"],
+            "revenue":          to_float(r["revenue"]),
+            "transactions":     int(r["transactions"]),
+            "unique_customers": int(r["unique_customers"]),
+        }
+        for r in rows
+    ])
+
+
+# -----------------------------------------
+# RUN
+# -----------------------------------------
+if __name__ == "__main__":
+    print("Movie Analytics API starting on http://localhost:5000")
+    print("Endpoints:")
+    endpoints = [
+        "/api/overview", "/api/monthly_revenue", "/api/rental_trends",
+        "/api/top_films", "/api/revenue_by_rating", "/api/top_genres",
+        "/api/film_table", "/api/dead_stock", "/api/rental_behavior", "/api/actors",
+        "/api/time_series_analysis", "/api/revenue_growth", "/api/seasonal_demand",
+        "/api/customer_behavior", "/api/genre_trends",
+        "/api/customer_query", "/api/monthly_revenue_extended",
     ]
-
-    for feat in features:
-        with feat["col"]:
-            st.markdown(f"""
-                <div class="fc-card">
-                    <div class="fc-icon {feat['color']}">{feat['svg']}</div>
-                    <div class="fc-title">{feat['title']}</div>
-                    <div class="fc-desc">{feat['desc']}</div>
-                    <span class="fc-badge {feat['status']}">
-                        {'Available' if feat['status'] == 'live' else 'Coming Soon'}
-                    </span>
-                </div>
-            """, unsafe_allow_html=True)
+    for ep in endpoints:
+        print(f"  {ep}")
+    app.run(debug=True, port=5000)
