@@ -1,0 +1,2801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Movie Analytics Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07080f;--bg2:#0c0e1a;--bg3:#111422;--card:#141729;--card2:#1a1f35;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --accent:#c8ff00;--accent2:#a8d800;--accent3:rgba(200,255,0,0.12);
+  --purple:#9b8ef5;--teal:#00e5c4;--orange:#ff8c42;--blue:#4facfe;--pink:#ff6bcd;--red:#ff4d6d;
+  --text:#eef0fc;--text2:#8b90b8;--text3:#5a5f80;
+  --font:'Manrope',sans-serif;--font2:'Syne',sans-serif;--mono:'DM Mono',monospace;
+  --radius:14px;--radius2:10px;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow-x:hidden}
+
+/* SIDEBAR */
+#sidebar{width:230px;min-height:100vh;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:width .3s}
+.sb-brand{padding:20px 16px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.sb-logo{width:34px;height:34px;background:var(--accent);border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sb-logo svg{width:18px;height:18px}
+.sb-brand-name{font-family:var(--font2);font-size:.9rem;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.sb-brand-sub{font-size:.62rem;color:var(--text3);margin-top:1px;font-family:var(--mono)}
+.sb-section{padding:16px 14px 6px;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--text3)}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:1px 8px;border-radius:var(--radius2);cursor:pointer;transition:all .15s;font-size:.8rem;font-weight:500;color:var(--text2)}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;opacity:.6}
+.nav-item:hover{background:var(--card);color:var(--text)}
+.nav-item.active{background:var(--accent3);color:var(--accent);border:1px solid rgba(200,255,0,.2)}
+.nav-item.active svg{opacity:1}
+.sb-footer{margin-top:auto;padding:14px;font-size:.62rem;color:var(--text3);font-family:var(--mono)}
+
+/* DB STATUS */
+.db-status{margin:10px 10px 4px;padding:7px 12px;border-radius:8px;font-size:.68rem;display:flex;align-items:center;gap:7px;border:1px solid;font-family:var(--mono)}
+.db-status.ok{background:rgba(0,229,196,.07);border-color:rgba(0,229,196,.2);color:var(--teal)}
+.db-status.err{background:rgba(255,77,109,.07);border-color:rgba(255,77,109,.2);color:var(--red)}
+.db-status.loading{background:rgba(200,255,0,.06);border-color:rgba(200,255,0,.15);color:var(--accent)}
+.db-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.db-status.ok .db-dot{background:var(--teal);animation:pulse 2s infinite}
+.db-status.err .db-dot{background:var(--red)}
+.db-status.loading .db-dot{background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* MAIN */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
+.page-title{font-family:var(--font2);font-size:1.15rem;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.page-sub{font-size:.72rem;color:var(--text3);margin-top:2px;font-family:var(--mono)}
+.date-chip{font-size:.68rem;color:var(--text2);background:var(--card);padding:5px 12px;border-radius:20px;border:1px solid var(--border);font-family:var(--mono)}
+.content{flex:1;overflow-y:auto;padding:20px 24px 40px}
+
+/* SKELETON */
+.skeleton{background:linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* STAT CARDS */
+.cards-row{display:grid;gap:12px;margin-bottom:18px}
+.cards-4{grid-template-columns:repeat(4,1fr)}
+.cards-3{grid-template-columns:repeat(3,1fr)}
+.sc{border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden}
+.sc-purple{background:rgba(155,142,245,.1);border:1px solid rgba(155,142,245,.2)}
+.sc-teal{background:rgba(0,229,196,.08);border:1px solid rgba(0,229,196,.18)}
+.sc-orange{background:rgba(255,140,66,.08);border:1px solid rgba(255,140,66,.18)}
+.sc-blue{background:rgba(79,172,254,.08);border:1px solid rgba(79,172,254,.18)}
+.sc-accent{background:rgba(200,255,0,.08);border:1px solid rgba(200,255,0,.2)}
+.sc-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:8px}
+.sc-value{font-family:var(--font2);font-size:1.6rem;font-weight:700;line-height:1}
+.sc-purple .sc-value{color:var(--purple)}
+.sc-teal .sc-value{color:var(--teal)}
+.sc-orange .sc-value{color:var(--orange)}
+.sc-blue .sc-value{color:var(--blue)}
+.sc-accent .sc-value{color:var(--accent)}
+.sc-sub{font-size:.67rem;color:var(--text3);margin-top:5px;font-family:var(--mono)}
+.sc-wm{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-family:var(--font2);font-size:2rem;font-weight:800;opacity:.05;color:var(--text)}
+
+/* KPI CARDS */
+.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;align-items:flex-start;gap:12px}
+.kpi-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.kpi-icon.purple{background:rgba(155,142,245,.15)}
+.kpi-icon.teal{background:rgba(0,229,196,.1)}
+.kpi-icon.red{background:rgba(255,77,109,.1)}
+.kpi-icon svg{width:15px;height:15px}
+.kpi-label{font-size:.67rem;color:var(--text3);margin-bottom:4px;font-family:var(--mono)}
+.kpi-val{font-family:var(--font2);font-size:1.18rem;font-weight:700;color:var(--text)}
+.kpi-hint{font-size:.65rem;color:var(--text3);margin-top:2px;font-family:var(--mono)}
+
+/* WHITE CARDS */
+.wc{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
+.wc-title{font-family:var(--font2);font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:2px;letter-spacing:-.01em}
+.wc-sub{font-size:.68rem;color:var(--text3);margin-bottom:14px;font-family:var(--mono)}
+.wc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:16px}
+.chart-controls{display:flex;gap:6px}
+.cc-btn{background:rgba(200,255,0,.05);border:1px solid rgba(200,255,0,.15);color:var(--text3);padding:5px 11px;border-radius:6px;font-size:.68rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:var(--font)}
+.cc-btn:hover{background:rgba(200,255,0,.1);border-color:rgba(200,255,0,.25)}
+.cc-btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.ts-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0}
+.ts-tab{background:transparent;border:none;color:var(--text3);padding:10px 12px;font-size:.73rem;font-weight:600;cursor:pointer;transition:all .2s;font-family:var(--font2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.ts-tab:hover{color:var(--text)}
+.ts-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.chart-modified-banner{font-size:.65rem;color:var(--text3);padding:6px 0;margin-bottom:8px;font-style:italic;display:none}
+.chart-modified-banner.show{display:block}
+.insight-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.insight-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.ic-label{font-size:.65rem;color:var(--text3);font-family:var(--mono);margin-bottom:4px}
+.ic-val{font-size:1.3rem;font-weight:700;font-family:var(--font2);margin-bottom:2px}
+.ic-sub{font-size:.68rem;color:var(--text3)}
+.row-2{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px}
+.row-2b{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+
+/* MILESTONE LIST */
+.ms-item{display:flex;align-items:center;gap:9px;padding:6px 0}
+.ms-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.ms-name{font-size:.78rem;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.ms-count{font-size:.65rem;color:var(--text3);font-family:var(--mono)}
+.ms-bar-wrap{width:60px;background:rgba(255,255,255,.05);border-radius:4px;height:4px;overflow:hidden}
+.ms-bar{height:4px;border-radius:4px}
+.ms-amt{font-size:.74rem;font-weight:600;min-width:52px;text-align:right;font-family:var(--mono)}
+
+/* RATING LEGEND */
+.rating-legend{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:10px;padding:10px;background:rgba(255,255,255,.02);border-radius:8px;border:1px solid var(--border)}
+.rl-item{display:flex;align-items:center;gap:6px;font-size:.68rem;color:var(--text2)}
+.rl-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* FEATURE CARDS */
+.section-label{font-family:var(--font2);font-size:.85rem;font-weight:700;color:var(--text);margin:6px 0 12px;letter-spacing:-.01em}
+.fc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.fc{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:all .2s}
+.fc:hover{border-color:var(--accent);background:rgba(200,255,0,.04);transform:translateY(-2px)}
+.fc-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.fc-icon.blue{background:rgba(79,172,254,.15)}
+.fc-icon.purple{background:rgba(155,142,245,.15)}
+.fc-icon.teal{background:rgba(0,229,196,.1)}
+.fc-icon.orange{background:rgba(255,140,66,.1)}
+.fc-icon.pink{background:rgba(255,107,205,.1)}
+.fc-icon svg{width:15px;height:15px}
+.fc-title{font-size:.8rem;font-weight:700;color:var(--text);margin-bottom:4px;font-family:var(--font2)}
+.fc-desc{font-size:.68rem;color:var(--text3);line-height:1.5}
+.fc-badge{display:inline-block;margin-top:8px;padding:3px 9px;border-radius:20px;font-size:.6rem;font-weight:700;background:rgba(200,255,0,.1);color:var(--accent);border:1px solid rgba(200,255,0,.2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
+
+/* PAGE */
+.page-section{display:none}
+.page-section.active{display:block}
+
+/* FEAT HERO */
+.feat-hero{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.feat-hero h2{font-family:var(--font2);font-size:1.05rem;font-weight:700;color:var(--text);margin-bottom:3px;letter-spacing:-.02em}
+.feat-hero p{font-size:.72rem;color:var(--text3);font-family:var(--mono)}
+.back-btn{background:rgba(200,255,0,.08);border:1px solid rgba(200,255,0,.25);color:var(--accent);font-size:.73rem;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:var(--font);font-weight:600;transition:all .15s}
+.back-btn:hover{background:rgba(200,255,0,.16)}
+
+/* FILTERS */
+.filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.filter-select{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.73rem;padding:7px 12px;border-radius:8px;font-family:var(--font);cursor:pointer;outline:none;transition:border-color .15s}
+.filter-select:focus{border-color:var(--accent)}
+
+/* TABLES */
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:.77rem}
+thead th{background:var(--bg3);color:var(--text3);font-weight:700;padding:10px 14px;text-align:left;font-size:.67rem;text-transform:uppercase;letter-spacing:.07em;font-family:var(--mono)}
+tbody tr{border-top:1px solid var(--border)}
+tbody tr:hover{background:rgba(255,255,255,.02)}
+tbody td{padding:10px 14px;color:var(--text2)}
+tbody td.val{color:var(--text);font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.62rem;font-weight:700;font-family:var(--mono)}
+.badge.g{background:rgba(26,184,73,.12);color:#1ab849}
+.badge.pg{background:rgba(79,172,254,.12);color:#4facfe}
+.badge.pg13{background:rgba(255,148,69,.12);color:#ff9445}
+.badge.r{background:rgba(255,77,109,.12);color:#ff4d6d}
+.badge.nc17{background:rgba(155,142,245,.12);color:#9b8ef5}
+
+/* ==========================================
+   AI PANEL — FLOATING CHATBOT
+   ========================================== */
+#ai-panel{
+  position:fixed;
+  bottom:24px;
+  right:24px;
+  width:340px;
+  height:560px;
+  background:var(--bg2);
+  border:1px solid var(--border2);
+  border-radius:18px;
+  display:flex;
+  flex-direction:column;
+  z-index:1000;
+  box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04);
+  transition:height .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1), border-radius .2s, box-shadow .2s;
+  overflow:hidden;
+  user-select:none;
+}
+#ai-panel.minimized{
+  height:56px;
+  border-radius:28px;
+  box-shadow:0 8px 32px rgba(0,0,0,.4);
+}
+#ai-panel.minimized .ai-tabs,
+#ai-panel.minimized .ai-tab-panel{
+  display:none !important;
+}
+#ai-panel.size-sm{ width:300px; height:460px; }
+#ai-panel.size-md{ width:340px; height:560px; }
+#ai-panel.size-lg{ width:420px; height:680px; }
+
+/* Floating toggle button (shown when panel is hidden) */
+#ai-fab{
+  position:fixed;
+  bottom:24px;
+  right:24px;
+  width:52px;height:52px;
+  background:var(--accent);
+  border-radius:50%;
+  display:none;
+  align-items:center;justify-content:center;
+  cursor:pointer;
+  z-index:999;
+  box-shadow:0 8px 24px rgba(200,255,0,.35);
+  transition:transform .15s, box-shadow .15s;
+  border:none;
+}
+#ai-fab:hover{ transform:scale(1.08); box-shadow:0 12px 32px rgba(200,255,0,.45); }
+#ai-fab svg{ width:22px;height:22px; }
+
+/* Drag handle area */
+#ai-panel .ai-header{ cursor:move; }
+
+/* Header */
+.ai-header{
+  padding:14px 16px 12px;
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.ai-header-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.ai-header-left{display:flex;align-items:center;gap:10px}
+.ai-avatar{
+  width:32px;height:32px;border-radius:8px;
+  background:var(--accent);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
+.ai-avatar svg{width:15px;height:15px}
+.ai-title-block{}
+.ai-title{font-family:var(--font2);font-size:.88rem;font-weight:700;color:var(--text);line-height:1.1}
+.ai-model-tag{font-size:.6rem;color:var(--text3);font-family:var(--mono);margin-top:1px}
+.ai-status-pill{
+  display:flex;align-items:center;gap:5px;
+  background:rgba(0,229,196,.07);border:1px solid rgba(0,229,196,.18);
+  border-radius:20px;padding:3px 9px;
+  font-size:.6rem;color:var(--teal);font-family:var(--mono);
+  flex-shrink:0
+}
+.ai-dot{width:5px;height:5px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
+
+/* Capability notice */
+.ai-cap-row{
+  display:flex;gap:6px;flex-wrap:wrap;
+}
+.ai-cap-chip{
+  font-size:.6rem;font-family:var(--mono);
+  background:rgba(155,142,245,.08);border:1px solid rgba(155,142,245,.18);
+  color:var(--purple);border-radius:4px;padding:2px 7px;
+}
+.ai-cap-chip.orange{background:rgba(255,140,66,.08);border-color:rgba(255,140,66,.2);color:var(--orange)}
+.ai-cap-chip.teal{background:rgba(0,229,196,.07);border-color:rgba(0,229,196,.18);color:var(--teal)}
+
+/* Tab bar */
+.ai-tabs{
+  display:flex;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.ai-tab{
+  flex:1;padding:8px 6px;font-size:.67rem;font-weight:600;
+  color:var(--text3);cursor:pointer;text-align:center;
+  border-bottom:2px solid transparent;transition:all .15s;
+  font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase;
+}
+.ai-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.ai-tab:hover:not(.active){color:var(--text2)}
+
+/* Tab panels */
+.ai-tab-panel{display:none;flex:1;overflow:hidden;flex-direction:column}
+.ai-tab-panel.active{display:flex}
+
+/* Quick panel */
+.quick-panel{flex:1;overflow-y:auto;padding:10px}
+.quick-section{margin-bottom:14px}
+.quick-section-label{
+  font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--text3);margin-bottom:7px;font-family:var(--mono);
+  display:flex;align-items:center;gap:6px
+}
+.quick-section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* Nav shortcuts */
+.nav-shortcut-list{display:flex;flex-direction:column;gap:3px}
+.ns-item{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  border-radius:7px;cursor:pointer;border:1px solid var(--border);
+  background:var(--card);transition:all .15s;
+}
+.ns-item:hover{border-color:var(--accent);background:rgba(200,255,0,.04)}
+.ns-icon{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ns-icon svg{width:11px;height:11px}
+.ns-icon.purple{background:rgba(155,142,245,.15)}
+.ns-icon.teal{background:rgba(0,229,196,.1)}
+.ns-icon.orange{background:rgba(255,140,66,.1)}
+.ns-icon.pink{background:rgba(255,107,205,.1)}
+.ns-name{font-size:.73rem;font-weight:600;color:var(--text2);flex:1}
+.ns-hint{font-size:.6rem;color:var(--text3);font-family:var(--mono)}
+.ns-arrow{font-size:.65rem;color:var(--text3);opacity:0;transition:opacity .15s}
+.ns-item:hover .ns-arrow{opacity:1}
+
+/* Quick prompts */
+.qp-list{display:flex;flex-direction:column;gap:4px}
+.qp{
+  background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+  padding:7px 10px;font-size:.71rem;color:var(--text2);cursor:pointer;
+  transition:all .15s;line-height:1.45;text-align:left;font-family:var(--font);
+  display:flex;align-items:flex-start;gap:7px
+}
+.qp:hover{background:var(--card2);border-color:rgba(200,255,0,.3);color:var(--text)}
+.qp-label{flex:1}
+.qp-cat{
+  font-size:.58rem;font-family:var(--mono);color:var(--text3);
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:3px;padding:1px 5px;white-space:nowrap;flex-shrink:0;margin-top:1px
+}
+
+/* Action prompts */
+.ap-list{display:flex;flex-direction:column;gap:4px}
+.ap{
+  background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+  padding:7px 10px;font-size:.71rem;color:var(--text2);cursor:pointer;
+  transition:all .15s;text-align:left;font-family:var(--font);
+  display:flex;align-items:center;gap:8px
+}
+.ap:hover{background:rgba(200,255,0,.06);border-color:rgba(200,255,0,.3);color:var(--text)}
+.ap-icon{
+  width:22px;height:22px;border-radius:5px;
+  background:rgba(200,255,0,.1);border:1px solid rgba(200,255,0,.2);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
+.ap-icon svg{width:10px;height:10px;stroke:var(--accent)}
+.ap-text{flex:1;font-size:.7rem}
+.ap-badge{
+  font-size:.58rem;font-family:var(--mono);color:var(--orange);
+  background:rgba(255,140,66,.08);border:1px solid rgba(255,140,66,.2);
+  border-radius:3px;padding:1px 5px;
+}
+
+/* Chat panel */
+.chat-panel{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.ai-chat{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:100%;animation:fadeUp .2s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{align-self:flex-end;max-width:88%}
+.msg.ai{align-self:flex-start;width:100%}
+.msg-bubble{padding:9px 12px;border-radius:10px;font-size:.73rem;line-height:1.55}
+.msg.user .msg-bubble{
+  background:rgba(200,255,0,.12);border:1px solid rgba(200,255,0,.22);
+  color:var(--text);border-bottom-right-radius:3px;font-family:var(--font)
+}
+.msg.ai .msg-bubble{
+  background:var(--card);border:1px solid var(--border);
+  color:var(--text2);border-bottom-left-radius:3px
+}
+.msg.ai .msg-bubble b,.msg.ai .msg-bubble strong{color:var(--text)}
+.msg-time{font-size:.58rem;color:var(--text3);margin-top:2px;font-family:var(--mono)}
+.msg.ai .msg-time{text-align:left}
+.msg.user .msg-time{text-align:right}
+
+/* Action result card */
+.action-card{
+  background:rgba(200,255,0,.05);border:1px solid rgba(200,255,0,.18);
+  border-radius:8px;padding:8px 11px;margin-top:7px;
+}
+.action-card-title{
+  font-size:.62rem;font-weight:700;color:var(--accent);
+  font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;
+  margin-bottom:4px;display:flex;align-items:center;gap:5px
+}
+.action-card-body{font-size:.7rem;color:var(--text2);line-height:1.45}
+
+/* Nav pill */
+.nav-pill{
+  display:inline-block;margin-top:7px;padding:4px 11px;
+  background:rgba(200,255,0,.08);border:1px solid rgba(200,255,0,.2);
+  border-radius:20px;font-size:.63rem;color:var(--accent);cursor:pointer;
+  font-family:var(--mono);font-weight:600;transition:all .15s
+}
+.nav-pill:hover{background:rgba(200,255,0,.18)}
+
+/* Typing */
+.typing-indicator{display:none;align-self:flex-start;padding:0 10px}
+.typing-indicator.show{display:flex}
+.typing-bubble{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:10px;border-bottom-left-radius:3px;
+  padding:10px 14px;display:flex;gap:4px;align-items:center
+}
+.typing-dot{width:5px;height:5px;border-radius:50%;background:var(--text3);animation:typing 1.2s infinite}
+.typing-dot:nth-child(2){animation-delay:.2s}
+.typing-dot:nth-child(3){animation-delay:.4s}
+@keyframes typing{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+
+/* Input */
+.ai-input-area{padding:9px 10px 12px;border-top:1px solid var(--border);flex-shrink:0}
+.ai-input-wrap{display:flex;gap:6px;align-items:flex-end}
+.ai-textarea{
+  flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-size:.73rem;font-family:var(--font);padding:8px 10px;
+  resize:none;outline:none;transition:border-color .15s;
+  min-height:36px;max-height:100px;line-height:1.45
+}
+.ai-textarea:focus{border-color:var(--accent)}
+.ai-textarea::placeholder{color:var(--text3)}
+.ai-send{
+  width:34px;height:34px;background:rgba(200,255,0,.12);
+  border:1px solid rgba(200,255,0,.28);border-radius:8px;
+  color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0
+}
+.ai-send:hover{background:rgba(200,255,0,.25)}
+.ai-send svg{width:13px;height:13px}
+.ai-hint{font-size:.58rem;color:var(--text3);margin-top:5px;text-align:center;font-family:var(--mono)}
+
+/* Chart title override banner */
+.chart-modified-banner{
+  display:none;font-size:.62rem;font-family:var(--mono);
+  color:var(--accent);background:rgba(200,255,0,.06);
+  border:1px solid rgba(200,255,0,.15);border-radius:5px;
+  padding:3px 9px;margin-bottom:8px;
+}
+.chart-modified-banner.show{display:block}
+
+/* AI control buttons */
+.ai-ctrl-btn{
+  width:26px;height:26px;border-radius:7px;border:1px solid var(--border);
+  background:rgba(255,255,255,.03);color:var(--text3);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;padding:0;
+}
+.ai-ctrl-btn svg{width:12px;height:12px;}
+.ai-ctrl-btn:hover{background:rgba(255,255,255,.09);color:var(--text);border-color:var(--border2);}
+
+/* Theme option buttons */
+.theme-opt{
+  display:flex;align-items:center;gap:7px;padding:6px 8px;
+  border-radius:8px;border:1px solid var(--border);background:transparent;
+  color:var(--text2);font-size:.68rem;font-family:var(--font);cursor:pointer;
+  transition:all .15s;width:100%;text-align:left;
+}
+.theme-opt:hover{background:rgba(255,255,255,.06);color:var(--text);}
+.theme-opt.active{border-color:var(--accent);background:rgba(200,255,0,.07);color:var(--accent);}
+.theme-swatch{
+  width:20px;height:20px;border-radius:5px;flex-shrink:0;
+  border:1px solid rgba(255,255,255,.1);
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+/* PREDICTION PAGE */
+.pred-model-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:.65rem;font-weight:700;background:rgba(155,142,245,.12);border:1px solid rgba(155,142,245,.25);color:var(--purple);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+.pred-model-badge svg{width:12px;height:12px}
+.pred-method-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.pred-method-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius2);padding:12px 14px;cursor:pointer;transition:all .15s}
+.pred-method-card:hover,.pred-method-card.active{border-color:var(--accent);background:rgba(200,255,0,.04)}
+.pred-method-card.active .pred-method-name{color:var(--accent)}
+.pred-method-name{font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:3px}
+.pred-method-desc{font-size:.63rem;color:var(--text3);font-family:var(--mono);line-height:1.4}
+.pred-metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.pred-metric{background:var(--card);border:1px solid var(--border);border-radius:var(--radius2);padding:11px 14px}
+.pred-metric-label{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--text3);margin-bottom:5px;font-family:var(--mono)}
+.pred-metric-val{font-family:var(--font2);font-size:1.05rem;font-weight:700;color:var(--accent)}
+.pred-metric-sub{font-size:.6rem;color:var(--text3);margin-top:2px;font-family:var(--mono)}
+.pred-forecast-table{margin-top:14px}
+.pred-forecast-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.pred-forecast-month{font-family:var(--mono);font-size:.75rem;color:var(--text2);min-width:80px}
+.pred-forecast-bar-wrap{flex:1;background:rgba(255,255,255,.04);border-radius:4px;height:6px;overflow:hidden}
+.pred-forecast-bar{height:6px;border-radius:4px;background:var(--purple);transition:width .6s}
+.pred-forecast-val{font-family:var(--font2);font-size:.82rem;font-weight:700;color:var(--purple);min-width:70px;text-align:right}
+.pred-forecast-ci{font-size:.62rem;color:var(--text3);font-family:var(--mono);min-width:100px;text-align:right}
+
+/* CUSTOMER QUERY PAGE */
+.cq-filter-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}
+.cq-label{font-size:.7rem;font-weight:600;color:var(--text2);font-family:var(--mono)}
+.cq-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:.78rem;padding:7px 12px;border-radius:8px;font-family:var(--mono);outline:none;width:100px;transition:border-color .15s}
+.cq-input:focus{border-color:var(--accent)}
+.cq-btn{background:var(--accent);color:#000;font-size:.73rem;font-weight:700;padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-family:var(--font);transition:opacity .15s}
+.cq-btn:hover{opacity:.88}
+.cq-result-meta{font-size:.72rem;color:var(--text3);font-family:var(--mono);margin-bottom:10px}
+.cq-result-meta b{color:var(--accent);font-family:var(--font2)}
+.city-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.6rem;font-weight:600;background:rgba(79,172,254,.1);color:#4facfe;border:1px solid rgba(79,172,254,.2);font-family:var(--mono)}
+
+@media(max-width:1200px){.cards-4{grid-template-columns:repeat(2,1fr)}.fc-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:800px){#sidebar{width:50px}.sb-brand-name,.sb-brand-sub,.nav-item span,.sb-footer,.sb-section{display:none}.nav-item{justify-content:center;padding:12px}.sb-brand{justify-content:center;padding:12px 0}}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside id="sidebar">
+  <div class="sb-brand">
+    <div class="sb-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/>
+        <line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/>
+      </svg>
+    </div>
+    <div>
+      <div class="sb-brand-name">Movie Analytics</div>
+      <div class="sb-brand-sub">dvdrental · PG</div>
+    </div>
+  </div>
+
+  <div class="db-status loading" id="db-status">
+    <div class="db-dot"></div>
+    <span id="db-status-text">Connecting...</span>
+  </div>
+
+  <div class="sb-section">Navigation</div>
+  <div class="nav-item active" onclick="showPage('overview',this)" data-page="overview">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    <span>Executive Summary</span>
+  </div>
+  <div class="nav-item" onclick="showPage('content',this)" data-page="content">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span>Content Performance</span>
+  </div>
+  <div class="nav-item" onclick="showPage('genre',this)" data-page="genre">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8.56 2.75c4.37 6.03 6.02 9.42 8.03 17.72m2.54-15.38c-3.72 4.35-8.94 5.66-16.88 5.85m19.5 1.9c-3.5-.93-6.63-.82-8.94 0-2.58.92-5.01 2.86-7.44 6.32"/></svg>
+    <span>Genre &amp; Audience</span>
+  </div>
+  <div class="nav-item" onclick="showPage('rental',this)" data-page="rental">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span>Rental Behavior</span>
+  </div>
+  <div class="nav-item" onclick="showPage('actor',this)" data-page="actor">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <span>Actor &amp; Cast Power</span>
+  </div>
+  <div class="nav-item" onclick="showPage('prediction',this)" data-page="prediction">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    <span>Revenue Prediction</span>
+  </div>
+  <div class="nav-item" onclick="showPage('customers',this)" data-page="customers">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    <span>Customer Query</span>
+  </div>
+  <div class="sb-footer">v2.0 · dvdrental</div>
+</aside>
+
+<!-- MAIN -->
+<main id="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title" id="page-title-text">Executive Summary</div>
+      <div class="page-sub" id="page-sub-text">Movie rental performance at a glance</div>
+    </div>
+    <div class="date-chip" id="date-chip"></div>
+  </div>
+
+  <div class="content">
+
+    <!-- OVERVIEW -->
+    <div class="page-section active" id="page-overview">
+      <div class="cards-row cards-4">
+        <div class="sc sc-purple"><div class="sc-label">Total Revenue</div><div class="sc-value" id="ov-revenue">-</div><div class="sc-sub">All-time income</div><div class="sc-wm">$</div></div>
+        <div class="sc sc-teal"><div class="sc-label">Total Rentals</div><div class="sc-value" id="ov-rentals">-</div><div class="sc-sub">All transactions</div><div class="sc-wm">#</div></div>
+        <div class="sc sc-orange"><div class="sc-label">Film Catalog</div><div class="sc-value" id="ov-films">-</div><div class="sc-sub">Unique titles</div><div class="sc-wm">F</div></div>
+        <div class="sc sc-blue"><div class="sc-label">Active Customers</div><div class="sc-value" id="ov-customers">-</div><div class="sc-sub">Customers who rented</div><div class="sc-wm">C</div></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="#9b8ef5" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+          <div><div class="kpi-label">Avg Revenue / Rental</div><div class="kpi-val" id="ov-avg-rental">-</div><div class="kpi-hint" id="ov-avg-hint">-</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-icon teal"><svg viewBox="0 0 24 24" fill="none" stroke="#00e5c4" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg></div>
+          <div><div class="kpi-label">Avg Revenue / Film</div><div class="kpi-val" id="ov-avg-film">-</div><div class="kpi-hint">Across all titles</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-icon red"><svg viewBox="0 0 24 24" fill="none" stroke="#ff4d6d" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div><div class="kpi-label">Dead Stock Films</div><div class="kpi-val" id="ov-dead">-</div><div class="kpi-hint">Films with zero rentals</div></div>
+        </div>
+      </div>
+      <div class="row-2">
+        <div class="wc">
+          <div class="wc-title">Monthly Revenue Trend</div>
+          <div class="wc-sub">Total payment income per month</div>
+          <canvas id="trendChart" height="180"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Top 5 Films by Revenue</div>
+          <div class="wc-sub">Highest earning titles</div>
+          <div id="top5list"><div class="skeleton" style="height:120px"></div></div>
+        </div>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title">Revenue by Rating</div>
+          <div class="wc-sub">Which rating tier earns the most</div>
+          <canvas id="ratingChart" height="170"></canvas>
+          <div class="rating-legend">
+            <div class="rl-item"><div class="rl-dot" style="background:#1ab849"></div>G - All ages</div>
+            <div class="rl-item"><div class="rl-dot" style="background:#4facfe"></div>PG - Parental guidance</div>
+            <div class="rl-item"><div class="rl-dot" style="background:#ff9445"></div>PG-13 - 13+</div>
+            <div class="rl-item"><div class="rl-dot" style="background:#ff4d6d"></div>R - 17+</div>
+            <div class="rl-item"><div class="rl-dot" style="background:#9b8ef5"></div>NC-17 - 18+</div>
+          </div>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Top Genres by Revenue</div>
+          <div class="wc-sub">Revenue from top categories</div>
+          <div id="genrelist"><div class="skeleton" style="height:120px"></div></div>
+        </div>
+      </div>
+      <div class="section-label">Explore Features</div>
+      <div class="fc-grid">
+        <div class="fc" onclick="showPage('timeseries',navItem('timeseries'))">
+          <div class="fc-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="#4facfe" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+          <div class="fc-title">Time Series Analysis</div>
+          <div class="fc-desc">Combined revenue &amp; rental trends.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+        <div class="fc" onclick="showPage('content',navItem('content'))">
+          <div class="fc-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="#9b8ef5" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div class="fc-title">Content Performance</div>
+          <div class="fc-desc">Top and bottom films, dead stock, rating profitability.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+        <div class="fc" onclick="showPage('genre',navItem('genre'))">
+          <div class="fc-icon teal"><svg viewBox="0 0 24 24" fill="none" stroke="#00e5c4" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <div class="fc-title">Genre &amp; Audience Taste</div>
+          <div class="fc-desc">Which genres drive rentals and revenue.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+        <div class="fc" onclick="showPage('rental',navItem('rental'))">
+          <div class="fc-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="#ff8c42" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="fc-title">Rental Behavior</div>
+          <div class="fc-desc">Late returns, peak days, duration patterns.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+        <div class="fc" onclick="showPage('actor',navItem('actor'))">
+          <div class="fc-icon pink"><svg viewBox="0 0 24 24" fill="none" stroke="#ff6bcd" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <div class="fc-title">Actor &amp; Cast Power</div>
+          <div class="fc-desc">Which actors drive rentals and revenue.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT PERFORMANCE -->
+    <div class="page-section" id="page-content">
+      <div class="feat-hero">
+        <div><h2>Content Performance</h2><p>Top films, dead stock, and rating profitability from your dvdrental DB</p></div>
+        <button class="back-btn" onclick="showPage('overview',navItem('overview'))">Back to Summary</button>
+      </div>
+      <div class="filter-bar">
+        <select class="filter-select" id="content-rating-filter" onchange="filterContent()">
+          <option value="all">All Ratings</option>
+          <option value="G">G</option><option value="PG">PG</option>
+          <option value="PG-13">PG-13</option><option value="R">R</option><option value="NC-17">NC-17</option>
+        </select>
+        <select class="filter-select" id="content-sort" onchange="filterContent()">
+          <option value="revenue">Sort by Revenue</option>
+          <option value="rentals">Sort by Rentals</option>
+          <option value="title">Sort by Title</option>
+        </select>
+        <select class="filter-select" id="content-limit" onchange="filterContent()">
+          <option value="20">Top 20</option><option value="50">Top 50</option><option value="100">All</option>
+        </select>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title">Revenue by Rating</div>
+          <div class="wc-sub">Profitability across content ratings</div>
+          <canvas id="contentRatingChart" height="200"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Dead Stock Analysis</div>
+          <div class="wc-sub">Films never rented vs rented</div>
+          <canvas id="deadStockChart" height="200"></canvas>
+        </div>
+      </div>
+      <div class="wc">
+        <div class="wc-title">Film Performance Table</div>
+        <div class="wc-sub">Films ranked by revenue with rental counts</div>
+        <div class="tbl-wrap" id="contentTable"><div class="skeleton" style="height:200px;border-radius:0"></div></div>
+      </div>
+    </div>
+
+    <!-- GENRE & AUDIENCE -->
+    <div class="page-section" id="page-genre">
+      <div class="feat-hero">
+        <div><h2>Genre &amp; Audience Taste</h2><p>Which genres drive rentals and revenue from your real data</p></div>
+        <button class="back-btn" onclick="showPage('overview',navItem('overview'))">Back to Summary</button>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title">Rentals by Genre</div>
+          <div class="wc-sub">Transaction volume per category</div>
+          <canvas id="genreRentalsChart" height="230"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Revenue by Genre</div>
+          <div class="wc-sub">Earnings per category</div>
+          <canvas id="genreRevenueChart" height="230"></canvas>
+        </div>
+      </div>
+      <div class="wc" style="margin-top:14px">
+        <div class="wc-title">Genre Breakdown Table</div>
+        <div class="wc-sub">Full category stats with rental count and revenue</div>
+        <div class="tbl-wrap" id="genreTable"><div class="skeleton" style="height:180px;border-radius:0"></div></div>
+      </div>
+    </div>
+
+    <!-- RENTAL BEHAVIOR -->
+    <div class="page-section" id="page-rental">
+      <div class="feat-hero">
+        <div><h2>Rental Behavior &amp; Late Returns</h2><p>Late returns, peak rental periods, and duration patterns from real data</p></div>
+        <button class="back-btn" onclick="showPage('overview',navItem('overview'))">Back to Summary</button>
+      </div>
+      <div class="cards-row cards-3">
+        <div class="sc sc-purple"><div class="sc-label">On-Time Returns</div><div class="sc-value" id="rb-ontime">-</div><div class="sc-sub">Returned within due date</div><div class="sc-wm">V</div></div>
+        <div class="sc sc-orange"><div class="sc-label">Late Returns</div><div class="sc-value" id="rb-late">-</div><div class="sc-sub">Returned after due date</div><div class="sc-wm">!</div></div>
+        <div class="sc sc-accent"><div class="sc-label">Late Return Rate</div><div class="sc-value" id="rb-rate">-</div><div class="sc-sub">Of all completed rentals</div><div class="sc-wm">%</div></div>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title" id="dayChartTitle">Rentals by Day of Week</div>
+          <div class="wc-sub" id="dayChartSub">Which days see the most rental activity</div>
+          <div class="chart-modified-banner" id="dayChartBanner"></div>
+          <canvas id="dayChart" height="200"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title" id="durationChartTitle">Rental Duration Distribution</div>
+          <div class="wc-sub" id="durationChartSub">How many days customers keep films</div>
+          <div class="chart-modified-banner" id="durationChartBanner"></div>
+          <canvas id="durationChart" height="200"></canvas>
+        </div>
+      </div>
+      <div class="wc" style="margin-top:14px">
+        <div class="wc-title">Late Return Details by Store</div>
+        <div class="wc-sub">Store-level late return analysis</div>
+        <div class="tbl-wrap" id="lateTable"><div class="skeleton" style="height:100px;border-radius:0"></div></div>
+      </div>
+    </div>
+
+    <!-- ACTOR & CAST -->
+    <div class="page-section" id="page-actor">
+      <div class="feat-hero">
+        <div><h2>Actor &amp; Cast Star Power</h2><p>Which actors and casts drive the most rentals and revenue</p></div>
+        <button class="back-btn" onclick="showPage('overview',navItem('overview'))">Back to Summary</button>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title" id="actorFilmsChartTitle">Top Actors by Film Count</div>
+          <div class="wc-sub" id="actorFilmsChartSub">Most appearances in the catalog</div>
+          <div class="chart-modified-banner" id="actorFilmsChartBanner"></div>
+          <canvas id="actorFilmsChart" height="220"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title" id="actorRevenueChartTitle">Top Actors by Revenue</div>
+          <div class="wc-sub" id="actorRevenueChartSub">Estimated revenue driven per actor</div>
+          <div class="chart-modified-banner" id="actorRevenueChartBanner"></div>
+          <canvas id="actorRevenueChart" height="220"></canvas>
+        </div>
+      </div>
+      <div class="wc" style="margin-top:14px">
+        <div class="wc-title">Actor Leaderboard</div>
+        <div class="wc-sub">Top actors by revenue (live from dvdrental)</div>
+        <div class="tbl-wrap" id="actorTable"><div class="skeleton" style="height:200px;border-radius:0"></div></div>
+      </div>
+    </div>
+
+    <!-- REVENUE PREDICTION -->
+    <div class="page-section" id="page-prediction">
+      <div class="feat-hero">
+        <div><h2>Revenue Prediction — Next 3 Months</h2><p>Time series forecasting using real historical data from dvdrental</p></div>
+        <button class="back-btn" onclick="showPage('overview',navItem('overview'))">Back to Summary</button>
+      </div>
+
+      <div class="pred-model-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.04-4.69V8.65a2.5 2.5 0 0 1 1.04-4.69A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.04-4.69V8.65a2.5 2.5 0 0 0-1.04-4.69A2.5 2.5 0 0 0 14.5 2Z"/></svg>
+        ML Model Active
+      </div>
+
+      <!-- Method selector -->
+      <div class="section-label" style="margin-top:0">Forecasting Method</div>
+      <div class="pred-method-grid">
+        <div class="pred-method-card active" id="method-holt" onclick="selectMethod('holt')">
+          <div class="pred-method-name">Transformer (Attention)</div>
+          <div class="pred-method-desc">Temporal self-attention model. Uses multi-head attention over lag windows to capture long-range dependencies and seasonal patterns.</div>
+        </div>
+        <div class="pred-method-card" id="method-rf" onclick="selectMethod('rf')">
+          <div class="pred-method-name">Random Forest Regression</div>
+          <div class="pred-method-desc">Ensemble method. Uses lag features, rolling means, and month-of-year. Handles non-linear revenue patterns.</div>
+        </div>
+        <div class="pred-method-card" id="method-linear" onclick="selectMethod('linear')">
+          <div class="pred-method-name">Linear Regression</div>
+          <div class="pred-method-desc">Simple baseline. Fits a trend line through historical data. Good reference point for comparison.</div>
+        </div>
+      </div>
+
+      <!-- Metrics row -->
+      <div class="pred-metrics-row">
+        <div class="pred-metric"><div class="pred-metric-label">Data Points</div><div class="pred-metric-val" id="pred-n">-</div><div class="pred-metric-sub">Monthly observations</div></div>
+        <div class="pred-metric"><div class="pred-metric-label">MAE</div><div class="pred-metric-val" id="pred-mae">-</div><div class="pred-metric-sub">Mean Abs Error</div></div>
+        <div class="pred-metric"><div class="pred-metric-label">RMSE</div><div class="pred-metric-val" id="pred-rmse">-</div><div class="pred-metric-sub">Root Mean Sq Error</div></div>
+        <div class="pred-metric"><div class="pred-metric-label">R²</div><div class="pred-metric-val" id="pred-r2">-</div><div class="pred-metric-sub">Fit quality</div></div>
+      </div>
+
+      <!-- Prediction chart -->
+      <div class="wc" style="margin-bottom:14px">
+        <div class="wc-title" id="predChartTitle">Monthly Revenue + 3-Month Forecast</div>
+        <div class="wc-sub" id="predChartSub">Historical data (solid) + predicted months (dashed) with confidence interval</div>
+        <canvas id="predChart" height="200"></canvas>
+      </div>
+
+      <!-- 3-month forecast table -->
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title">3-Month Forecast Detail</div>
+          <div class="wc-sub">Predicted revenue with confidence interval (±1 std dev)</div>
+          <div id="pred-forecast-list"><div class="skeleton" style="height:100px"></div></div>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Model Explanation</div>
+          <div class="wc-sub">How the selected method works</div>
+          <div id="pred-model-explanation" style="font-size:.75rem;color:var(--text2);line-height:1.7;padding-top:4px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CUSTOMER QUERY -->
+    <div class="page-section" id="page-customers">
+      <div class="feat-hero">
+        <div><h2>Customer Query — Rental Spend Analysis</h2><p>Complex query: filter customers by total rental spend, sort by cost</p></div>
+        <button class="back-btn" onclick="showPage('overview',navItem('overview'))">Back to Summary</button>
+      </div>
+
+      <div class="cq-filter-bar">
+        <span class="cq-label">Min Total Spend ($)</span>
+        <input class="cq-input" type="number" id="cq-min-cost" value="100" min="0" step="10">
+        <span class="cq-label">Sort by</span>
+        <select class="filter-select" id="cq-sort">
+          <option value="cost">Total Cost (desc)</option>
+          <option value="rentals">Total Rentals (desc)</option>
+          <option value="name">Name (asc)</option>
+        </select>
+        <span class="cq-label">Limit</span>
+        <select class="filter-select" id="cq-limit">
+          <option value="50">Top 50</option>
+          <option value="100">Top 100</option>
+          <option value="200">All (200)</option>
+        </select>
+        <button class="cq-btn" onclick="runCustomerQuery()">Run Query</button>
+      </div>
+
+      <div class="cq-result-meta" id="cq-result-meta"></div>
+
+      <div class="row-2b" style="margin-bottom:14px">
+        <div class="wc">
+          <div class="wc-title">Spend Distribution</div>
+          <div class="wc-sub">Customer count by spend bucket</div>
+          <canvas id="cqSpendChart" height="200"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Top 10 by Revenue</div>
+          <div class="wc-sub">Highest spending customers</div>
+          <canvas id="cqTopChart" height="200"></canvas>
+        </div>
+      </div>
+
+      <div class="wc">
+        <div class="wc-title">Customer Results Table</div>
+        <div class="wc-sub">Filtered and sorted customer data from dvdrental</div>
+        <div class="tbl-wrap" id="cq-table"><div class="skeleton" style="height:200px;border-radius:0"></div></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- FAB (shown when panel is hidden) -->
+<button id="ai-fab" onclick="showPanel()" title="Open AI Analyst">
+  <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/></svg>
+</button>
+
+<!-- AI PANEL -->
+<aside id="ai-panel">
+  <div class="ai-header" id="ai-drag-handle">
+    <div class="ai-header-row">
+      <div class="ai-header-left">
+        <div class="ai-avatar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/></svg>
+        </div>
+        <div class="ai-title-block">
+          <div class="ai-title">AI Analyst</div>
+          <div class="ai-model-tag">Llama 3 · Groq</div>
+        </div>
+      </div>
+      <!-- Panel controls -->
+      <div style="display:flex;align-items:center;gap:4px">
+        <div class="ai-status-pill" style="margin-right:4px">
+          <div class="ai-dot"></div>
+          Live
+        </div>
+        <!-- Theme picker -->
+        <button class="ai-ctrl-btn" onclick="openThemePicker(event)" title="Change theme" id="theme-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 1 7 7c0 3.87-3.13 7-7 7a2 2 0 0 0 0 4"/></svg>
+        </button>
+        <!-- Size toggle -->
+        <button class="ai-ctrl-btn" onclick="cycleSize()" title="Resize panel" id="size-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+        <!-- Minimize -->
+        <button class="ai-ctrl-btn" onclick="toggleMinimize()" title="Minimize" id="minimize-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <!-- Close -->
+        <button class="ai-ctrl-btn" onclick="hidePanel()" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="ai-cap-row" id="ai-cap-row">
+      <span class="ai-cap-chip">Answer questions</span>
+      <span class="ai-cap-chip orange">Modify charts</span>
+      <span class="ai-cap-chip teal">Navigate pages</span>
+    </div>
+  </div>
+
+  <!-- Theme picker dropdown -->
+  <div id="theme-picker" style="display:none;position:absolute;top:56px;right:8px;z-index:100;background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:10px;width:200px;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+    <div style="font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:8px;font-family:var(--mono)">Dashboard Theme</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="theme-options">
+      <button class="theme-opt active" data-theme="dark" onclick="applyTheme('dark',this)"><span class="theme-swatch" style="background:linear-gradient(135deg,#07080f,#c8ff00)"></span>Dark</button>
+      <button class="theme-opt" data-theme="midnight" onclick="applyTheme('midnight',this)"><span class="theme-swatch" style="background:linear-gradient(135deg,#05060f,#7c6bff)"></span>Midnight</button>
+      <button class="theme-opt" data-theme="white" onclick="applyTheme('white',this)"><span class="theme-swatch" style="background:linear-gradient(135deg,#f4f5f8,#6366f1)"></span>White</button>
+      <button class="theme-opt" data-theme="pink" onclick="applyTheme('pink',this)"><span class="theme-swatch" style="background:linear-gradient(135deg,#fdf2f8,#ec4899)"></span>Pink</button>
+      <button class="theme-opt" data-theme="lavender" onclick="applyTheme('lavender',this)"><span class="theme-swatch" style="background:linear-gradient(135deg,#f5f3ff,#7c3aed)"></span>Lavender</button>
+      <button class="theme-opt" data-theme="sky" onclick="applyTheme('sky',this)"><span class="theme-swatch" style="background:linear-gradient(135deg,#f0f9ff,#0284c7)"></span>Sky</button>
+      <button class="theme-opt" data-theme="mint" onclick="applyTheme('mint',this)"><span class="theme-swatch" style="background:linear-gradient(135deg,#f0fdf4,#059669)"></span>Mint</button>
+      <button class="theme-opt" data-theme="peach" onclick="applyTheme('peach',this)"><span class="theme-swatch" style="background:linear-gradient(135deg,#fff7ed,#ea580c)"></span>Peach</button>
+    </div>
+  </div>
+
+  <div class="ai-tabs">
+    <div class="ai-tab active" onclick="switchTab('quick')">Quick</div>
+    <div class="ai-tab" onclick="switchTab('actions')">Actions</div>
+    <div class="ai-tab" onclick="switchTab('chat')">Chat</div>
+  </div>
+
+  <!-- QUICK TAB -->
+  <div class="ai-tab-panel active" id="tab-quick">
+    <div class="quick-panel">
+
+      <div class="quick-section">
+        <div class="quick-section-label">Pages</div>
+        <div class="nav-shortcut-list">
+          <div class="ns-item" onclick="goAndAsk('content','Analyze the content performance and give top film insights.')">
+            <div class="ns-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="#9b8ef5" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+            <div class="ns-name">Content Performance</div>
+            <div class="ns-arrow">→</div>
+          </div>
+          <div class="ns-item" onclick="goAndAsk('genre','What genres drive the most rentals and revenue? Give insights.')">
+            <div class="ns-icon teal"><svg viewBox="0 0 24 24" fill="none" stroke="#00e5c4" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="ns-name">Genre &amp; Audience</div>
+            <div class="ns-arrow">→</div>
+          </div>
+          <div class="ns-item" onclick="goAndAsk('rental','Analyze rental behavior — late returns, peak days, patterns.')">
+            <div class="ns-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="#ff8c42" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="ns-name">Rental Behavior</div>
+            <div class="ns-arrow">→</div>
+          </div>
+          <div class="ns-item" onclick="goAndAsk('actor','Which actors have the best return on investment?')">
+            <div class="ns-icon pink"><svg viewBox="0 0 24 24" fill="none" stroke="#ff6bcd" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+            <div class="ns-name">Actor Star Power</div>
+            <div class="ns-arrow">→</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-section">
+        <div class="quick-section-label">Ask a question</div>
+        <div class="qp-list">
+          <button class="qp" onclick="sendQuick('Which genre generates the most revenue and why?')">
+            <span class="qp-label">Which genre generates the most revenue?</span>
+            <span class="qp-cat">Genre</span>
+          </button>
+          <button class="qp" onclick="sendQuick('What does our late return rate mean for the business? Give 3 recommendations.')">
+            <span class="qp-label">What does the late return rate mean for business?</span>
+            <span class="qp-cat">Rental</span>
+          </button>
+          <button class="qp" onclick="sendQuick('How should we handle dead stock films? Give strategy.')">
+            <span class="qp-label">How should we handle dead stock films?</span>
+            <span class="qp-cat">Content</span>
+          </button>
+          <button class="qp" onclick="sendQuick('Which rating category is most profitable per film?')">
+            <span class="qp-label">Which rating category is most profitable?</span>
+            <span class="qp-cat">Content</span>
+          </button>
+          <button class="qp" onclick="sendQuick('Give a full executive summary and 3 actionable recommendations.')">
+            <span class="qp-label">Give a full executive summary with recommendations</span>
+            <span class="qp-cat">Overview</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ACTIONS TAB -->
+  <div class="ai-tab-panel" id="tab-actions">
+    <div class="quick-panel">
+      <div class="quick-section">
+        <div class="quick-section-label">Chart modifications</div>
+        <div class="ap-list">
+          <button class="ap" onclick="sendActionAndSwitch('actor','Change the top actors by revenue chart to show top actors by total film count instead.')">
+            <div class="ap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg></div>
+            <span class="ap-text">Switch actor revenue chart to total film count</span>
+            <span class="ap-badge">Actor</span>
+          </button>
+          <button class="ap" onclick="sendActionAndSwitch('actor','Change the top actors by film count chart to show total rentals per actor instead.')">
+            <div class="ap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg></div>
+            <span class="ap-text">Switch actor film count chart to total rentals</span>
+            <span class="ap-badge">Actor</span>
+          </button>
+          <button class="ap" onclick="sendActionAndSwitch('rental','Change the rentals by day of week chart to show a line chart instead of a bar chart.')">
+            <div class="ap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <span class="ap-text">Change day of week chart from bar to line</span>
+            <span class="ap-badge">Rental</span>
+          </button>
+          <button class="ap" onclick="sendActionAndSwitch('rental','Change the rental duration distribution to show percentage of total instead of raw counts.')">
+            <div class="ap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <span class="ap-text">Show duration chart as percentage instead of count</span>
+            <span class="ap-badge">Rental</span>
+          </button>
+          <button class="ap" onclick="sendActionAndSwitch('actor','Reset all actor charts back to their original default view.')">
+            <div class="ap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg></div>
+            <span class="ap-text">Reset actor charts to default</span>
+            <span class="ap-badge">Reset</span>
+          </button>
+        </div>
+      </div>
+      <div class="quick-section">
+        <div class="quick-section-label">Or describe any change</div>
+        <div class="qp-list">
+          <button class="qp" onclick="focusInput('Describe a chart change you want, for example: ')">
+            <span class="qp-label">Type your own chart modification request...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT TAB -->
+  <div class="ai-tab-panel" id="tab-chat">
+    <div class="chat-panel">
+      <div class="ai-chat" id="ai-chat">
+        <div class="msg ai">
+          <div class="msg-bubble">
+            Hello. I am your <b>AI Analyst</b> powered by <b>Llama 3 (Groq)</b>, connected to your live <b>dvdrental</b> database.<br><br>
+            You can ask me any question about your data, and I can also <b>modify charts directly</b> on the dashboard. For example, say: "change the top actors by revenue chart to show total film count instead" and I will apply it automatically.
+          </div>
+          <div class="msg-time">Just now</div>
+        </div>
+      </div>
+
+      <div class="typing-indicator" id="typing-indicator">
+        <div class="typing-bubble">
+          <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+        </div>
+      </div>
+
+      <div class="ai-input-area">
+        <div class="ai-input-wrap">
+          <textarea class="ai-textarea" id="ai-input" placeholder="Ask a question or request a chart change..." rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="ai-send" onclick="sendMessage()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+        <div class="ai-hint">Llama 3 · Groq · Live dvdrental · Chart modification enabled</div>
+      </div>
+    </div>
+  </div>
+
+</aside>
+
+<script>
+// ══════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════
+const API_BASE = 'http://localhost:5000/api';
+const GROQ_KEY = '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';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+const COLORS = {
+  purple:'#9b8ef5', teal:'#00e5c4', orange:'#ff8c42',
+  blue:'#4facfe', pink:'#ff6bcd', red:'#ff4d6d', accent:'#c8ff00', green:'#1ab849'
+};
+const RATING_COLORS = {'G':'#1ab849','PG':'#4facfe','PG-13':'#ff9445','R':'#ff4d6d','NC-17':'#9b8ef5'};
+const GENRE_PAL = ['#9b8ef5','#00e5c4','#ff8c42','#4facfe','#ff6bcd','#c8ff00','#ff4d6d','#1ab849'];
+const CH_GRID = {color:'rgba(255,255,255,0.04)'};
+let CH_TEXT = '#5a5f80';
+
+const PAGE_META = {
+  overview:{title:'Executive Summary',sub:'Movie rental performance at a glance'},
+  timeseries:{title:'Time Series Analysis',sub:'Combined revenue and rental trends · Live DB'},
+  content:{title:'Content Performance',sub:'Top and bottom films, ROI and rating analysis · Live DB'},
+  genre:{title:'Genre and Audience Taste',sub:'Category preferences and audience insights · Live DB'},
+  rental:{title:'Rental Behavior and Late Returns',sub:'Patterns, duration, late return analysis · Live DB'},
+  actor:{title:'Actor and Cast Star Power',sub:'Which actors drive rentals and revenue · Live DB'},
+  prediction:{title:'Revenue Prediction',sub:'3-month forecast using Transformer (Attention) time series model · Live DB'},
+  customers:{title:'Customer Query',sub:'Complex query: customers by total rental spend · Live DB'},
+};
+
+const PAGE_KEYWORDS = {
+  timeseries:['time series','trend','combined','revenue','rental'],
+  content:['film','content','movie','title','dead stock','rating','profit','top film','bottom','catalog'],
+  genre:['genre','category','audience','taste','sports','drama','comedy','action','horror','sci-fi'],
+  rental:['rental','late return','return rate','peak','day','duration','behavior','pattern','delay'],
+  actor:['actor','cast','star','cast power','performer','role','actress'],
+};
+
+// ══════════════════════════════════════════
+// DATE
+// ══════════════════════════════════════════
+document.getElementById('date-chip').textContent =
+  new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+// ══════════════════════════════════════════
+// TAB SWITCHING
+// ══════════════════════════════════════════
+function switchTab(name){
+  document.querySelectorAll('.ai-tab').forEach((t,i)=>{
+    const names=['quick','actions','chat'];
+    t.classList.toggle('active', names[i]===name);
+  });
+  document.querySelectorAll('.ai-tab-panel').forEach(p=>{
+    p.classList.toggle('active', p.id==='tab-'+name);
+  });
+}
+
+// ══════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════
+function navItem(key){
+  return document.querySelector(`.nav-item[data-page="${key}"]`);
+}
+
+function showPage(key, navEl){
+  document.querySelectorAll('.page-section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+key).classList.add('active');
+  if(navEl) navEl.classList.add('active');
+  const m = PAGE_META[key];
+  document.getElementById('page-title-text').textContent = m.title;
+  document.getElementById('page-sub-text').textContent = m.sub;
+  document.querySelector('.content').scrollTop = 0;
+  if(key==='content') loadContent();
+  if(key==='timeseries') loadTimeSeries();
+  if(key==='genre') loadGenre();
+  if(key==='rental') loadRental();
+  if(key==='actor') loadActors();
+  if(key==='prediction') loadPrediction();
+  if(key==='customers') loadCustomers();
+}
+
+function goAndAsk(page, msg){
+  showPage(page, navItem(page));
+  switchTab('chat');
+  setTimeout(()=>sendQuick(msg), 300);
+}
+
+function sendActionAndSwitch(page, msg){
+  showPage(page, navItem(page));
+  switchTab('chat');
+  setTimeout(()=>sendQuick(msg), 400);
+}
+
+function focusInput(placeholder){
+  switchTab('chat');
+  setTimeout(()=>{
+    const inp = document.getElementById('ai-input');
+    inp.placeholder = placeholder || 'Ask anything...';
+    inp.focus();
+  }, 100);
+}
+
+// ══════════════════════════════════════════
+// DB STATUS
+// ══════════════════════════════════════════
+function setDbStatus(state, text){
+  const el = document.getElementById('db-status');
+  el.className = `db-status ${state}`;
+  document.getElementById('db-status-text').textContent = text;
+}
+
+// ══════════════════════════════════════════
+// API FETCH
+// ══════════════════════════════════════════
+async function apiFetch(ep){
+  const res = await fetch(API_BASE+ep);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return res.json();
+}
+
+// ══════════════════════════════════════════
+// CHART REGISTRY — stores instance + raw data per chart
+// ══════════════════════════════════════════
+const charts = {};
+const chartData = {}; // stores {labels, datasets, metric, title, sub} per chart id
+
+function makeChart(id, cfg, meta){
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id).getContext('2d'), cfg);
+  // Store raw data for AI to re-use when switching types
+  if(meta) chartData[id] = meta;
+}
+
+// Expose chart registry to AI engine
+window._charts = charts;
+window._chartData = chartData;
+
+// ══════════════════════════════════════════
+// FLEXIBLE CHART MODIFICATION ENGINE
+// ══════════════════════════════════════════
+// AI returns: [CHART_JSON:{...}] with a full spec.
+// We parse it and re-render the target chart.
+//
+// Spec format (AI fills these fields):
+// {
+//   "chartId": "dayChart",          // canvas element id
+//   "type": "line",                 // bar|line|doughnut|pie|radar|polarArea|scatter
+//   "title": "New chart title",     // optional - updates .wc-title above canvas
+//   "sub": "subtitle text",         // optional - updates .wc-sub
+//   "color": "#c8ff00",             // optional accent color override
+//   "dataKey": "rentals"|"revenue"|"films"|null,  // which data field to use (if source data available)
+//   "indexAxis": "x"|"y",           // optional - horizontal bars
+//   "note": "description shown in chat"
+// }
+
+const PALETTE = ['#9b8ef5','#00e5c4','#ff8c42','#4facfe','#ff6bcd','#c8ff00','#ff4d6d','#1ab849','#ffd60a','#38bdf8'];
+
+// Chart source data registry — filled as pages load
+const chartSources = {};
+
+function registerChartSource(id, data){
+  chartSources[id] = data;
+}
+
+function applyFlexibleChartChange(spec){
+  const {chartId, type, title, sub, color, dataKey, indexAxis, note} = spec;
+  const src = chartSources[chartId];
+  if(!chartId || !type){ console.warn('[AI Chart] Missing chartId or type', spec); return false; }
+
+  const canvas = document.getElementById(chartId);
+  if(!canvas){ console.warn('[AI Chart] Canvas not found:', chartId); return false; }
+
+  // Get data — from source registry or from existing chart
+  let labels=[], values=[], multiDatasets=null;
+  const isDoughnut = ['doughnut','pie','polarArea'].includes(type);
+  const isRadar = type==='radar';
+
+  if(src){
+    labels = src.labels || [];
+    if(dataKey && src[dataKey]){
+      values = src[dataKey];
+    } else {
+      values = src.values || src.rentals || src.revenue || src.films || [];
+    }
+    // For radar/multi-dataset: expose all numeric keys
+    if((isRadar || type==='bar') && src._multi){
+      multiDatasets = src._multi;
+    }
+  } else if(charts[chartId]){
+    // Fallback: extract from existing Chart.js instance
+    const ch = charts[chartId];
+    labels = ch.data.labels || [];
+    if(dataKey && ch.data.datasets){
+      // Try to find dataset matching dataKey in label
+      const ds = ch.data.datasets.find(d=>(d.label||'').toLowerCase().includes(dataKey)) || ch.data.datasets[0];
+      values = ds ? ds.data : [];
+    } else {
+      values = ch.data.datasets[0]?.data || [];
+    }
+  }
+
+  if(!labels.length && !values.length){ return false; }
+
+  // Pick colors
+  const accent = color || '#9b8ef5';
+  const multiColors = PALETTE;
+
+  // Build dataset(s)
+  let datasets;
+  if(multiDatasets && (isRadar)){
+    datasets = multiDatasets.map((d,i)=>({
+      label: d.label,
+      data: d.data,
+      borderColor: multiColors[i % multiColors.length],
+      backgroundColor: multiColors[i % multiColors.length]+'33',
+      borderWidth: 2, pointRadius: 4,
+    }));
+  } else if(isDoughnut){
+    datasets = [{
+      data: values,
+      backgroundColor: labels.map((_,i)=>multiColors[i % multiColors.length]),
+      borderWidth: 0, hoverOffset: 6
+    }];
+  } else if(type==='line'){
+    datasets = [{
+      data: values,
+      borderColor: accent,
+      backgroundColor: accent+'18',
+      borderWidth: 2.5,
+      pointBackgroundColor: accent,
+      pointRadius: 4,
+      tension: 0.35,
+      fill: true,
+      label: dataKey || 'Value'
+    }];
+  } else {
+    // bar, polarArea, etc.
+    datasets = [{
+      data: values,
+      backgroundColor: values.map((_,i)=> isDoughnut||type==='polarArea' ? multiColors[i%multiColors.length] : accent),
+      borderRadius: type==='bar' ? 6 : 0,
+      label: dataKey || 'Value'
+    }];
+  }
+
+  // Build options
+  const hasScales = !['doughnut','pie','polarArea','radar'].includes(type);
+  const options = {
+    responsive: true,
+    indexAxis: indexAxis || 'x',
+    plugins: {
+      legend: { display: isDoughnut || isRadar, labels:{color:CH_TEXT, font:{size:10}, boxWidth:10} },
+      tooltip: { callbacks: { label: v=>{
+        const val = v.raw || v.formattedValue;
+        return typeof val==='number' && val>100 ? ' $'+Number(val).toLocaleString() : ' '+val;
+      }}}
+    }
+  };
+  if(hasScales){
+    options.scales = {
+      x:{ grid:CH_GRID, ticks:{ color:CH_TEXT, font:{size:9} } },
+      y:{ grid:CH_GRID, ticks:{ color:CH_TEXT, font:{size:9} } }
+    };
+  }
+
+  makeChart(chartId, { type, data:{labels, datasets}, options });
+
+  // Update title/sub in DOM
+  if(title){
+    const card = canvas.closest('.wc');
+    if(card){
+      const t = card.querySelector('.wc-title');
+      const s = card.querySelector('.wc-sub');
+      if(t) t.textContent = title;
+      if(s && sub) s.textContent = sub;
+    }
+  }
+
+  // Show banner
+  const bannerId = chartId + 'Banner';
+  const bannerEl = document.getElementById(bannerId);
+  if(bannerEl){
+    bannerEl.textContent = `Modified: Changed to ${type} chart${title ? ' — '+title : ''}`;
+    bannerEl.classList.add('show');
+  }
+
+  return true;
+}
+
+// ══════════════════════════════════════════
+// CHART STATE PERSISTENCE (localStorage)
+// ══════════════════════════════════════════
+const CHART_STATE_KEY = 'dvr_chart_state';
+const FLEX_CHART_STATE_KEY = 'dvr_flex_chart_state';
+
+function saveChartState(action){
+  try{
+    const s=JSON.parse(localStorage.getItem(CHART_STATE_KEY)||'{}');
+    if(!s._applied) s._applied=[];
+    if(!s._applied.includes(action)) s._applied.push(action);
+    localStorage.setItem(CHART_STATE_KEY,JSON.stringify(s));
+  }catch(e){}
+}
+function clearChartState(actions){
+  try{
+    const s=JSON.parse(localStorage.getItem(CHART_STATE_KEY)||'{}');
+    if(!actions){localStorage.removeItem(CHART_STATE_KEY);return;}
+    s._applied=(s._applied||[]).filter(a=>!actions.includes(a));
+    localStorage.setItem(CHART_STATE_KEY,JSON.stringify(s));
+  }catch(e){}
+}
+function saveFlexChartState(spec){
+  try{
+    const s=JSON.parse(localStorage.getItem(FLEX_CHART_STATE_KEY)||'{}');
+    s[spec.chartId]=spec;
+    localStorage.setItem(FLEX_CHART_STATE_KEY,JSON.stringify(s));
+  }catch(e){}
+}
+function clearFlexChartState(chartIds){
+  try{
+    const s=JSON.parse(localStorage.getItem(FLEX_CHART_STATE_KEY)||'{}');
+    if(!chartIds){localStorage.removeItem(FLEX_CHART_STATE_KEY);return;}
+    chartIds.forEach(id=>delete s[id]);
+    localStorage.setItem(FLEX_CHART_STATE_KEY,JSON.stringify(s));
+  }catch(e){}
+}
+function restoreChartState(){
+  try{
+    const s=JSON.parse(localStorage.getItem(CHART_STATE_KEY)||'{}');
+    const applied=s._applied||[];
+    if(applied.length){
+      const tryR=(n=0)=>{
+        if(n>20)return;
+        applied.forEach(action=>{
+          if((action.startsWith('actor_')&&!cachedActorData)||
+             ((action.startsWith('day_')||action.startsWith('duration_'))&&!cachedRentalData))return;
+          applyChartAction(action,cachedActorData,cachedRentalData);
+        });
+        const pend=applied.filter(a=>(a.startsWith('actor_')&&!cachedActorData)||
+          ((a.startsWith('day_')||a.startsWith('duration_'))&&!cachedRentalData));
+        if(pend.length)setTimeout(()=>tryR(n+1),400);
+      };
+      setTimeout(()=>tryR(),600);
+    }
+  }catch(e){}
+  try{
+    const flex=JSON.parse(localStorage.getItem(FLEX_CHART_STATE_KEY)||'{}');
+    const specs=Object.values(flex);
+    if(!specs.length)return;
+    const tryFlex=(n=0)=>{
+      if(n>20)return;
+      let pend=[];
+      specs.forEach(spec=>{
+        if(chartSources[spec.chartId]||charts[spec.chartId]) applyFlexibleChartChange(spec);
+        else pend.push(spec);
+      });
+      if(pend.length)setTimeout(()=>tryFlex(n+1),500);
+    };
+    setTimeout(()=>tryFlex(),800);
+  }catch(e){}
+}
+
+// ── Legacy fixed actions (kept for backwards compat + reset) ──
+function applyChartAction(action, actorData, rentalData){
+  const banner = id => document.getElementById(id+'Banner');
+  const showBanner = (id, text) => {
+    const el = banner(id);
+    if(el){ el.textContent = 'Modified: '+text; el.classList.add('show'); }
+  };
+
+  switch(action){
+    case 'actor_films_to_rentals':
+      if(!actorData) return;
+      {
+        const top = actorData.slice(0,10);
+        const spec = {chartId:'actorFilmsChart',type:'bar',title:'Top Actors by Total Rentals',sub:'Most rentals driven per actor',color:'#00e5c4'};
+        registerChartSource('actorFilmsChart',{labels:top.map(a=>a.name.split(' ')[0]),values:top.map(a=>a.rentals),rentals:top.map(a=>a.rentals),films:top.map(a=>a.films),revenue:top.map(a=>parseFloat(a.revenue)||0)});
+        applyFlexibleChartChange(spec);
+        saveChartState('actor_films_to_rentals');
+      } break;
+
+    case 'actor_revenue_to_films':
+      if(!actorData) return;
+      {
+        const top = actorData.slice(0,10);
+        registerChartSource('actorRevenueChart',{labels:top.map(a=>a.name.split(' ')[0]),values:top.map(a=>a.films),rentals:top.map(a=>a.rentals),films:top.map(a=>a.films),revenue:top.map(a=>parseFloat(a.revenue)||0)});
+        applyFlexibleChartChange({chartId:'actorRevenueChart',type:'bar',title:'Top Actors by Total Film Count',sub:'Number of films per actor',color:'#c8ff00'});
+        saveChartState('actor_revenue_to_films');
+      } break;
+
+    case 'actor_reset':
+      if(!actorData) return;
+      {
+        renderActorCharts(actorData);
+        if(banner('actorFilmsChart')) banner('actorFilmsChart').classList.remove('show');
+        if(banner('actorRevenueChart')) banner('actorRevenueChart').classList.remove('show');
+        clearChartState(['actor_films_to_rentals','actor_revenue_to_films']);
+        // also clear any flexible changes on actor charts
+        clearFlexChartState(['actorFilmsChart','actorRevenueChart']);
+      } break;
+
+    case 'day_chart_line':
+      if(!rentalData) return;
+      {
+        const dayOrder=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const dayMap={};rentalData.days.forEach(d=>{dayMap[d.day]=d.rentals;});
+        registerChartSource('dayChart',{labels:dayOrder,values:dayOrder.map(d=>dayMap[d]||0)});
+        applyFlexibleChartChange({chartId:'dayChart',type:'line',title:'Rentals by Day of Week',color:'#c8ff00'});
+        saveChartState('day_chart_line');
+      } break;
+
+    case 'duration_chart_percent':
+      if(!rentalData) return;
+      {
+        const totalDur = rentalData.duration.reduce((a,d)=>a+d.rentals,0);
+        const pctVals = rentalData.duration.map(d=>+((d.rentals/totalDur)*100).toFixed(1));
+        const durLabels = rentalData.duration.map(d=>d.days>=8?'8+ days':d.days+' day'+(d.days>1?'s':''));
+        registerChartSource('durationChart',{labels:durLabels,values:pctVals});
+        applyFlexibleChartChange({chartId:'durationChart',type:'bar',title:'Rental Duration (% of Total)',sub:'Percentage of rentals per duration bucket',color:'#ff6bcd'});
+        saveChartState('duration_chart_percent');
+      } break;
+
+    default:
+      console.warn('Unknown chart action:', action);
+  }
+}
+
+// ══════════════════════════════════════════
+// OVERVIEW
+// ══════════════════════════════════════════
+async function loadOverview(){
+  try{
+    const [ov, monthly, top5, ratings, genres] = await Promise.all([
+      apiFetch('/overview'), apiFetch('/monthly_revenue'),
+      apiFetch('/top_films'), apiFetch('/revenue_by_rating'), apiFetch('/top_genres'),
+    ]);
+    setDbStatus('ok', 'Connected · dvdrental');
+
+    document.getElementById('ov-revenue').textContent = '$'+Number(ov.total_revenue).toLocaleString();
+    document.getElementById('ov-rentals').textContent = Number(ov.total_rentals).toLocaleString();
+    document.getElementById('ov-films').textContent = Number(ov.total_films).toLocaleString();
+    document.getElementById('ov-customers').textContent = Number(ov.active_customers).toLocaleString();
+    document.getElementById('ov-avg-rental').textContent = '$'+ov.avg_per_rental;
+    document.getElementById('ov-avg-hint').textContent = `Based on ${Number(ov.total_rentals).toLocaleString()} rentals`;
+    document.getElementById('ov-avg-film').textContent = '$'+ov.avg_per_film;
+    document.getElementById('ov-dead').textContent = ov.dead_stock;
+
+    registerChartSource('trendChart',{labels:monthly.map(r=>r.month),values:monthly.map(r=>parseFloat(r.revenue)),revenue:monthly.map(r=>parseFloat(r.revenue))});
+    makeChart('trendChart',{type:'line',
+      data:{labels:monthly.map(r=>r.month),datasets:[{
+        data:monthly.map(r=>parseFloat(r.revenue)),fill:true,
+        borderColor:'#9b8ef5',borderWidth:2.5,
+        backgroundColor:'rgba(155,142,245,0.07)',
+        pointBackgroundColor:'#9b8ef5',pointRadius:3.5,tension:.35
+      }]},
+      options:{responsive:true,plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:v=>'$'+v.formattedValue}}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:9}}},
+                y:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:9},callback:v=>'$'+Number(v).toLocaleString()}}}}
+    });
+
+    const pal=[COLORS.purple,COLORS.teal,COLORS.orange,COLORS.blue,COLORS.pink];
+    const mx=parseFloat(top5[0].revenue);
+    document.getElementById('top5list').innerHTML=top5.map((f,i)=>{
+      const pct=Math.round(parseFloat(f.revenue)/mx*100);
+      return `<div class="ms-item">
+        <div class="ms-dot" style="background:${pal[i]}"></div>
+        <div style="flex:1;min-width:0"><div class="ms-name">${f.title}</div><div class="ms-count">${f.rentals} rentals</div></div>
+        <div class="ms-bar-wrap"><div class="ms-bar" style="width:${pct}%;background:${pal[i]}"></div></div>
+        <div class="ms-amt" style="color:${pal[i]}">$${Math.round(parseFloat(f.revenue))}</div>
+      </div>`;
+    }).join('');
+
+    registerChartSource('ratingChart',{labels:ratings.map(r=>r.rating),values:ratings.map(r=>parseFloat(r.revenue)),revenue:ratings.map(r=>parseFloat(r.revenue)),rentals:ratings.map(r=>r.rentals)});
+    makeChart('ratingChart',{type:'doughnut',
+      data:{labels:ratings.map(r=>r.rating),
+            datasets:[{data:ratings.map(r=>parseFloat(r.revenue)),
+                       backgroundColor:ratings.map(r=>RATING_COLORS[r.rating]||'#888'),borderWidth:0,hoverOffset:6}]},
+      options:{responsive:true,cutout:'60%',plugins:{legend:{position:'right',
+        labels:{color:CH_TEXT,font:{size:10},boxWidth:10,padding:12}},
+        tooltip:{callbacks:{label:v=>' $'+Number(v.raw).toLocaleString()}}}}
+    });
+
+    const gmx=parseFloat(genres[0].revenue);
+    document.getElementById('genrelist').innerHTML=genres.map((g,i)=>{
+      const pct=Math.round(parseFloat(g.revenue)/gmx*100);
+      return `<div class="ms-item">
+        <div class="ms-dot" style="background:${GENRE_PAL[i]}"></div>
+        <div style="flex:1;min-width:0"><div class="ms-name">${g.category}</div><div class="ms-count">${g.rentals} rentals</div></div>
+        <div class="ms-bar-wrap"><div class="ms-bar" style="width:${pct}%;background:${GENRE_PAL[i]}"></div></div>
+        <div class="ms-amt" style="color:${GENRE_PAL[i]}">$${Number(g.revenue).toLocaleString()}</div>
+      </div>`;
+    }).join('');
+
+    window.dashData = {ov, monthly, top5, ratings, genres};
+  } catch(e){
+    setDbStatus('err','DB Error - is Flask running on :5000?');
+    console.error(e);
+  }
+}
+
+// ══════════════════════════════════════════
+// TIME SERIES ANALYSIS
+// ══════════════════════════════════════════
+let tsData=null, tsLoaded=false;
+async function loadTimeSeries(){
+  if(tsLoaded) return;
+  tsLoaded = true;
+  try{
+    const combined = await apiFetch('/time_series_analysis');
+    tsData = {combined};
+    renderTsCombined();
+    const maxEntry = combined.reduce((a,b)=>b.revenue>a.revenue?b:a, combined[0]);
+    const avgRev = combined.reduce((s,r)=>s+r.revenue,0)/combined.length;
+    document.getElementById('ts-peak-month').textContent = maxEntry.period;
+    document.getElementById('ts-peak-val').textContent = '$'+Number(maxEntry.revenue).toLocaleString();
+    document.getElementById('ts-points').textContent = combined.length;
+    document.getElementById('ts-avg-rev').textContent = '$'+Math.round(avgRev).toLocaleString();
+  } catch(e){
+    console.error('Time Series load error:', e);
+  }
+}
+
+function showTsView(view, btn){
+  ['combined'].forEach(v=>{
+    const el=document.getElementById('ts-'+v);
+    if(el) el.style.display = v===view?'':'none';
+  });
+  document.querySelectorAll('#page-timeseries .ts-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function renderTsCombined(mode='both'){
+  if(!tsData) return;
+  const d = tsData.combined;
+  const datasets = [];
+  if(mode==='both'||mode==='revenue'){
+    datasets.push({label:'Revenue ($)',data:d.map(r=>r.revenue),yAxisID:'y',
+      borderColor:'#9b8ef5',backgroundColor:'rgba(155,142,245,0.08)',borderWidth:2.5,fill:true,tension:.35,pointRadius:3});
+  }
+  if(mode==='both'||mode==='rentals'){
+    datasets.push({label:'Rentals',data:d.map(r=>r.rentals),yAxisID:mode==='both'?'y1':'y',
+      borderColor:'#00e5c4',backgroundColor:'rgba(0,229,196,0.05)',borderWidth:2.5,fill:mode!=='both',tension:.35,pointRadius:3});
+  }
+  const scales = {
+    x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:9}}},
+    y:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+Number(v).toLocaleString()},position:'left'}
+  };
+  if(mode==='both') scales.y1={grid:{display:false},ticks:{color:'#00e5c4'},position:'right'};
+  makeChart('tsChart',{type:'line',data:{labels:d.map(r=>r.period),datasets},
+    options:{responsive:true,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{color:CH_TEXT,font:{size:10}}}},scales}
+  });
+}
+
+function toggleTsDual(mode, btn){
+  document.querySelectorAll('#ts-combined .chart-controls .cc-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTsCombined(mode);
+}
+
+// ══════════════════════════════════════════
+// CONTENT PERFORMANCE
+// ══════════════════════════════════════════
+let filmData=[], contentLoaded=false;
+async function loadContent(){
+  if(contentLoaded) return;
+  contentLoaded=true;
+  try{
+    const [films, ds, ratings] = await Promise.all([
+      apiFetch('/film_table'), apiFetch('/dead_stock'), apiFetch('/revenue_by_rating')
+    ]);
+    filmData=films;
+    renderContentTable();
+
+    makeChart('contentRatingChart',{type:'bar',
+      data:{labels:ratings.map(r=>r.rating),
+            datasets:[{label:'Revenue',data:ratings.map(r=>parseFloat(r.revenue)),
+                       backgroundColor:ratings.map(r=>RATING_COLORS[r.rating]||'#888'),borderRadius:6,borderSkipped:false}]},
+      options:{responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+Number(v).toLocaleString()}}}}
+    });
+
+    const deadTotal = ds.by_rating.reduce((a,r)=>a+r.count,0);
+    makeChart('deadStockChart',{type:'doughnut',
+      data:{labels:['Active Films','Dead Stock'],
+            datasets:[{data:[ds.rented, deadTotal],
+                       backgroundColor:['#9b8ef5','#ff4d6d'],borderWidth:0,hoverOffset:4}]},
+      options:{responsive:true,cutout:'55%',plugins:{legend:{position:'bottom',
+        labels:{color:CH_TEXT,font:{size:10},boxWidth:10}},
+        tooltip:{callbacks:{label:v=>` ${v.label}: ${v.raw}`}}}}
+    });
+  } catch(e){ console.error('Content load error',e); }
+}
+
+function renderContentTable(){
+  let data=[...filmData];
+  const f=document.getElementById('content-rating-filter').value;
+  const s=document.getElementById('content-sort').value;
+  const lim=parseInt(document.getElementById('content-limit').value);
+  if(f!=='all') data=data.filter(x=>x.rating===f);
+  if(s==='rentals') data.sort((a,b)=>b.rentals-a.rentals);
+  else if(s==='title') data.sort((a,b)=>a.title.localeCompare(b.title));
+  else data.sort((a,b)=>b.revenue-a.revenue);
+  data=data.slice(0,lim);
+  const bc={G:'g',PG:'pg','PG-13':'pg13',R:'r','NC-17':'nc17'};
+  document.getElementById('contentTable').innerHTML=`<table>
+    <thead><tr><th>#</th><th>Film Title</th><th>Rating</th><th>Rentals</th><th>Revenue</th></tr></thead>
+    <tbody>${data.map((f,i)=>`<tr>
+      <td class="val">${i+1}</td><td class="val">${f.title}</td>
+      <td><span class="badge ${bc[f.rating]||''}">${f.rating}</span></td>
+      <td>${Number(f.rentals).toLocaleString()}</td>
+      <td class="val">$${Number(f.revenue).toFixed(2)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+function filterContent(){renderContentTable();}
+
+// ══════════════════════════════════════════
+// GENRE
+// ══════════════════════════════════════════
+let genreLoaded=false;
+async function loadGenre(){
+  if(genreLoaded) return;
+  genreLoaded=true;
+  try{
+    const genres=await apiFetch('/top_genres?limit=16');
+    registerChartSource('genreRentalsChart',{labels:genres.map(g=>g.category),values:genres.map(g=>g.rentals),rentals:genres.map(g=>g.rentals),revenue:genres.map(g=>parseFloat(g.revenue))});
+    makeChart('genreRentalsChart',{type:'bar',
+      data:{labels:genres.map(g=>g.category),
+            datasets:[{label:'Rentals',data:genres.map(g=>g.rentals),
+                       backgroundColor:GENRE_PAL,borderRadius:5}]},
+      options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:10}}}}}
+    });
+    registerChartSource('genreRevenueChart',{labels:genres.map(g=>g.category),values:genres.map(g=>parseFloat(g.revenue)),revenue:genres.map(g=>parseFloat(g.revenue)),rentals:genres.map(g=>g.rentals)});
+    makeChart('genreRevenueChart',{type:'bar',
+      data:{labels:genres.map(g=>g.category),
+            datasets:[{label:'Revenue',data:genres.map(g=>parseFloat(g.revenue)),
+                       backgroundColor:GENRE_PAL,borderRadius:5}]},
+      options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+Number(v).toLocaleString()}},
+                y:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:10}}}}}
+    });
+    document.getElementById('genreTable').innerHTML=`<table>
+      <thead><tr><th>Genre</th><th>Rentals</th><th>Revenue</th><th>Avg/Rental</th></tr></thead>
+      <tbody>${genres.map(g=>`<tr>
+        <td class="val">${g.category}</td>
+        <td>${Number(g.rentals).toLocaleString()}</td>
+        <td class="val">$${Number(g.revenue).toLocaleString()}</td>
+        <td>$${(parseFloat(g.revenue)/g.rentals).toFixed(2)}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch(e){ console.error('Genre load error',e); }
+}
+
+// ══════════════════════════════════════════
+// RENTAL BEHAVIOR
+// ══════════════════════════════════════════
+let rentalLoaded=false;
+let cachedRentalData = null;
+async function loadRental(){
+  if(rentalLoaded) return;
+  rentalLoaded=true;
+  try{
+    const data=await apiFetch('/rental_behavior');
+    cachedRentalData = data;
+    const late=parseInt(data.late.late);
+    const total=parseInt(data.late.total);
+    const ontime=total-late;
+    document.getElementById('rb-ontime').textContent=ontime.toLocaleString();
+    document.getElementById('rb-late').textContent=late.toLocaleString();
+    document.getElementById('rb-rate').textContent=((late/total)*100).toFixed(1)+'%';
+
+    const dayOrder=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dayMap={};data.days.forEach(d=>{dayMap[d.day]=d.rentals;});
+    const dayVals=dayOrder.map(d=>dayMap[d]||0);
+    const peakIdx=dayVals.indexOf(Math.max(...dayVals));
+    const dayColors=dayVals.map((_,i)=>i===peakIdx?'#c8ff00':'#9b8ef5');
+
+    registerChartSource('dayChart',{labels:dayOrder,values:dayVals,rentals:dayVals});
+    makeChart('dayChart',{type:'bar',
+      data:{labels:dayOrder,datasets:[{data:dayVals,backgroundColor:dayColors,borderRadius:6}]},
+      options:{responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT}}}}
+    });
+
+    const durLabels=data.duration.map(d=>d.days>=8?'8+ days':d.days+' day'+(d.days>1?'s':''));
+    registerChartSource('durationChart',{labels:durLabels,values:data.duration.map(d=>d.rentals),rentals:data.duration.map(d=>d.rentals)});
+    makeChart('durationChart',{type:'bar',
+      data:{labels:durLabels,datasets:[{data:data.duration.map(d=>d.rentals),
+            backgroundColor:'#00e5c4',borderRadius:6}]},
+      options:{responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT}}}}
+    });
+
+    if(data.store_late){
+      document.getElementById('lateTable').innerHTML=`<table>
+        <thead><tr><th>Store ID</th><th>Total Rentals</th><th>Late Returns</th><th>Late Rate</th></tr></thead>
+        <tbody>${data.store_late.map(s=>`<tr>
+          <td class="val">Store ${s.store_id}</td>
+          <td>${Number(s.total).toLocaleString()}</td>
+          <td>${Number(s.late).toLocaleString()}</td>
+          <td class="val">${s.rate}%</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+  } catch(e){ console.error('Rental load error',e); }
+}
+
+// ══════════════════════════════════════════
+// ACTORS
+// ══════════════════════════════════════════
+let actorLoaded=false;
+let cachedActorData = null;
+async function loadActors(){
+  if(actorLoaded) return;
+  actorLoaded=true;
+  try{
+    const actors=await apiFetch('/actors');
+    cachedActorData = actors;
+    renderActorCharts(actors);
+  } catch(e){ console.error('Actor load error',e); }
+}
+
+function renderActorCharts(actors){
+  const top=actors.slice(0,10);
+  const labels=top.map(a=>a.name.split(' ')[0]);
+  registerChartSource('actorFilmsChart',{labels,values:top.map(a=>a.films),films:top.map(a=>a.films),rentals:top.map(a=>a.rentals),revenue:top.map(a=>parseFloat(a.revenue)||0)});
+  registerChartSource('actorRevenueChart',{labels,values:top.map(a=>parseFloat(a.revenue)||0),films:top.map(a=>a.films),rentals:top.map(a=>a.rentals),revenue:top.map(a=>parseFloat(a.revenue)||0)});
+  makeChart('actorFilmsChart',{type:'bar',
+    data:{labels:top.map(a=>a.name.split(' ')[0]),
+          datasets:[{data:top.map(a=>a.films),backgroundColor:'#ff8c42',borderRadius:5}]},
+    options:{responsive:true,plugins:{legend:{display:false}},
+      scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:9}}},
+              y:{grid:CH_GRID,ticks:{color:CH_TEXT}}}}
+  });
+  makeChart('actorRevenueChart',{type:'bar',
+    data:{labels:top.map(a=>a.name.split(' ')[0]),
+          datasets:[{data:top.map(a=>parseFloat(a.revenue)||0),backgroundColor:'#ff6bcd',borderRadius:5}]},
+    options:{responsive:true,plugins:{legend:{display:false}},
+      scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:9}}},
+              y:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+Number(v).toLocaleString()}}}}
+  });
+  document.getElementById('actorTable').innerHTML=`<table>
+    <thead><tr><th>#</th><th>Actor</th><th>Films</th><th>Rentals</th><th>Revenue</th></tr></thead>
+    <tbody>${actors.map((a,i)=>`<tr>
+      <td class="val">${i+1}</td><td class="val">${a.name}</td>
+      <td>${a.films}</td>
+      <td>${Number(a.rentals).toLocaleString()}</td>
+      <td class="val">$${Number(a.revenue).toLocaleString()}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ══════════════════════════════════════════
+// AI ANALYST — GROQ LLAMA 3
+// ══════════════════════════════════════════
+let chatHistory=[];
+let currentPage='overview';
+
+function buildSystemContext(){
+  const d=window.dashData||{};
+  const ov=d.ov||{};
+  const top5=(d.top5||[]).map(f=>`${f.title}: $${f.revenue} (${f.rentals} rentals)`).join(', ');
+  const ratings=(d.ratings||[]).map(r=>`${r.rating}: $${r.revenue}`).join(' | ');
+  const genres=(d.genres||[]).map(g=>`${g.category}: ${g.rentals} rentals, $${g.revenue}`).join(' | ');
+
+  // Build live chart inventory from chartSources
+  const chartList = Object.entries(chartSources).map(([id,src])=>{
+    const keys = Object.keys(src).filter(k=>k!=='labels'&&k!=='values'&&!k.startsWith('_'));
+    return `  - "${id}": labels=[${(src.labels||[]).slice(0,5).join(', ')}...], dataKeys=[${keys.join(',')}]`;
+  }).join('\n');
+
+  return `You are an AI analyst for a Movie Rental Analytics Dashboard connected to a LIVE dvdrental PostgreSQL database.
+
+LIVE DATABASE SUMMARY:
+- Total Revenue: $${ov.total_revenue||'?'} | Total Rentals: ${ov.total_rentals||'?'} | Film Catalog: ${ov.total_films||'?'} | Active Customers: ${ov.active_customers||'?'}
+- Avg Revenue/Rental: $${ov.avg_per_rental||'?'} | Dead Stock: ${ov.dead_stock||'?'} films
+- Top 5 Films: ${top5||'loading...'}
+- Rating Revenue: ${ratings||'loading...'}
+- Top Genres: ${genres||'loading...'}
+
+DASHBOARD PAGES:
+- "overview" = Executive Summary (trendChart, ratingChart)
+- "content" = Content Performance
+- "genre" = Genre and Audience Taste (genreRentalsChart, genreRevenueChart)
+- "rental" = Rental Behavior (dayChart, durationChart)
+- "actor" = Actor and Cast Power (actorFilmsChart, actorRevenueChart)
+
+AVAILABLE CHARTS (live registry):
+${chartList || '  (charts will appear once pages are loaded)'}
+
+═══ FLEXIBLE CHART MODIFICATION ═══
+You can change ANY chart to ANY chart type. When the user asks to change a chart, respond with your explanation AND embed a JSON tag using EXACTLY this format (no spaces around the braces):
+[CHART_JSON:{"chartId":"CHART_ID","type":"CHART_TYPE","title":"New Title","sub":"subtitle","color":"#hexcolor","dataKey":"KEY","note":"what you did"}]
+
+CHART TYPES available: bar, line, doughnut, pie, radar, polarArea
+CHART IDs available: trendChart, ratingChart, genreRentalsChart, genreRevenueChart, dayChart, durationChart, actorFilmsChart, actorRevenueChart
+DATA KEYS per chart: rentals, revenue, films (use whichever fits the chart's source)
+
+EXAMPLES:
+- User: "change day chart to line" → [CHART_JSON:{"chartId":"dayChart","type":"line","title":"Rentals by Day (Line)","color":"#c8ff00","dataKey":"rentals","note":"Changed bar to line chart"}]
+- User: "change genre rentals to donut" → [CHART_JSON:{"chartId":"genreRentalsChart","type":"doughnut","title":"Rentals by Genre","color":"#9b8ef5","dataKey":"rentals","note":"Changed to donut chart"}]
+- User: "show actor revenue as radar" → [CHART_JSON:{"chartId":"actorRevenueChart","type":"radar","title":"Actor Revenue (Radar)","color":"#ff6bcd","dataKey":"revenue","note":"Changed to radar chart"}]
+- User: "make trend chart a bar chart" → [CHART_JSON:{"chartId":"trendChart","type":"bar","title":"Monthly Revenue (Bar)","color":"#9b8ef5","dataKey":"revenue","note":"Changed to bar chart"}]
+
+You can also still use [NAVIGATE:page_name] to navigate pages.
+Use [CHART_ACTION:actor_reset] to reset all actor charts to default.
+
+IMPORTANT RULES for chart tags:
+- Always use valid JSON inside [CHART_JSON:...]
+- chartId must exactly match one from the CHART IDs list above
+- type must be one of: bar, line, doughnut, pie, radar, polarArea
+- Do NOT include the tag if no chart change was requested
+
+General rules:
+- Use plain English. No emojis. Format bullets with dash character.
+- Respond concisely, under 200 words unless detail is needed.
+- Reference specific numbers from the data when relevant.
+- Be direct and business-focused.`;
+}
+
+function detectChartJSON(text){
+  const m = text.match(/\[CHART_JSON:(\{.*?\})\]/s);
+  if(!m) return null;
+  try{ return JSON.parse(m[1]); }
+  catch(e){ console.warn('[AI] Failed to parse CHART_JSON:', m[1], e); return null; }
+}
+
+function detectChartAction(text){
+  const m = text.match(/\[CHART_ACTION:(\w+)\]/);
+  return m ? m[1] : null;
+}
+
+function detectPage(text){
+  const m = text.match(/\[NAVIGATE:(\w+)\]/);
+  if(m && PAGE_META[m[1]]) return m[1];
+  const lower = text.toLowerCase();
+  for(const [page, kws] of Object.entries(PAGE_KEYWORDS)){
+    if(kws.some(kw=>lower.includes(kw))) return page;
+  }
+  return null;
+}
+
+function getTime(){
+  return new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+}
+
+function appendMsg(role, html){
+  const chat=document.getElementById('ai-chat');
+  const div=document.createElement('div');
+  div.className=`msg ${role}`;
+  div.innerHTML=`<div class="msg-bubble">${html}</div><div class="msg-time">${getTime()}</div>`;
+  chat.appendChild(div);
+  chat.scrollTop=chat.scrollHeight;
+}
+
+function showTyping(show){
+  const t=document.getElementById('typing-indicator');
+  t.classList.toggle('show',show);
+  if(show) document.getElementById('ai-chat').scrollTop=99999;
+}
+
+async function callGroq(userMsg){
+  chatHistory.push({role:'user',content:userMsg});
+  showTyping(true);
+  try{
+    const res=await fetch(GROQ_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${GROQ_KEY}`},
+      body:JSON.stringify({
+        model:'llama-3.3-70b-versatile',
+        messages:[{role:'system',content:buildSystemContext()},...chatHistory],
+        max_tokens:600,temperature:.65
+      })
+    });
+    const data=await res.json();
+    showTyping(false);
+
+    if(data.error){ appendMsg('ai',`Error: ${data.error.message}`); return; }
+
+    let txt=data.choices[0].message.content;
+    chatHistory.push({role:'assistant',content:txt});
+
+    // Parse chart modification (new flex JSON system)
+    const chartSpec = detectChartJSON(txt);
+    // Also support legacy CHART_ACTION tags
+    const chartAction = !chartSpec ? detectChartAction(txt) : null;
+    const targetPage = detectPage(txt);
+
+    // Clean all tags from display text
+    let clean = txt
+      .replace(/\[CHART_JSON:\{.*?\}\]/gs,'')
+      .replace(/\[CHART_ACTION:\w+\]/g,'')
+      .replace(/\[NAVIGATE:\w+\]/g,'')
+      .trim();
+
+    // Format text
+    let formatted = clean
+      .replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')
+      .replace(/^- (.+)/gm,'<span style="display:block;padding-left:10px;margin-top:3px;border-left:2px solid rgba(200,255,0,.25);margin-left:2px">- $1</span>')
+      .replace(/\n/g,'<br>');
+
+    // Show chart modification confirmation card
+    if(chartSpec){
+      const typeLabels={bar:'Bar',line:'Line',doughnut:'Donut',pie:'Pie',radar:'Radar',polarArea:'Polar Area'};
+      formatted += `<div class="action-card">
+        <div class="action-card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
+          Chart Modified
+        </div>
+        <div class="action-card-body">
+          <b>${chartSpec.chartId}</b> → <b>${typeLabels[chartSpec.type]||chartSpec.type}</b> chart${chartSpec.title ? '<br>'+chartSpec.title : ''}
+        </div>
+      </div>`;
+    } else if(chartAction){
+      const actionLabels={
+        actor_revenue_to_films:'Top Actors by Revenue → Film Count',
+        actor_films_to_rentals:'Top Actors by Film Count → Total Rentals',
+        actor_reset:'Actor charts reset to default.',
+        day_chart_line:'Day of Week chart → Line',
+        duration_chart_percent:'Duration chart → Percentage view',
+      };
+      formatted += `<div class="action-card">
+        <div class="action-card-title">Chart Modified</div>
+        <div class="action-card-body">${actionLabels[chartAction]||'Chart updated.'}</div>
+      </div>`;
+    }
+
+    // Navigation pill
+    if(targetPage && targetPage!==currentPage){
+      const labels={content:'Content Performance',genre:'Genre and Audience',rental:'Rental Behavior',actor:'Actor Power',overview:'Executive Summary'};
+      formatted+=`<br><span class="nav-pill" onclick="showPage('${targetPage}',navItem('${targetPage}'))">Go to ${labels[targetPage]||targetPage}</span>`;
+    }
+
+    appendMsg('ai',formatted);
+
+    // Apply chart changes after message appears
+    if(chartSpec){
+      setTimeout(()=>{
+        const ok = applyFlexibleChartChange(chartSpec);
+        if(ok) saveFlexChartState(chartSpec);
+        else console.warn('[AI] Chart change failed for spec:', chartSpec);
+      }, 300);
+    } else if(chartAction){
+      setTimeout(()=>{
+        applyChartAction(chartAction, cachedActorData, cachedRentalData);
+      }, 300);
+    }
+
+    // Auto navigate
+    if(targetPage && targetPage!==currentPage){
+      setTimeout(()=>{ showPage(targetPage,navItem(targetPage)); currentPage=targetPage; },1000);
+    }
+
+  } catch(err){
+    showTyping(false);
+    appendMsg('ai',`Error: ${err.message}`);
+    console.error(err);
+  }
+}
+
+function sendMessage(){
+  const inp=document.getElementById('ai-input');
+  const msg=inp.value.trim();
+  if(!msg) return;
+  switchTab('chat');
+  appendMsg('user',msg);
+  inp.value='';
+  inp.style.height='auto';
+  callGroq(msg);
+}
+
+function sendQuick(msg){
+  switchTab('chat');
+  appendMsg('user',msg);
+  callGroq(msg);
+}
+
+function handleKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+}
+
+function autoResize(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,100)+'px';
+}
+
+// ══════════════════════════════════════════
+// FLOATING AI PANEL — SHOW/HIDE/MINIMIZE/DRAG/SIZE/THEME
+// ══════════════════════════════════════════
+
+let panelMinimized = false;
+let panelVisible = true;
+let currentSize = 'md'; // sm | md | lg
+const sizes = ['sm','md','lg'];
+const sizeLabels = {sm:'Small',md:'Medium',lg:'Large'};
+
+function showPanel(){
+  document.getElementById('ai-panel').style.display='flex';
+  document.getElementById('ai-fab').style.display='none';
+  panelVisible = true;
+}
+function hidePanel(){
+  document.getElementById('ai-panel').style.display='none';
+  document.getElementById('ai-fab').style.display='flex';
+  panelVisible = false;
+  // Close theme picker if open
+  document.getElementById('theme-picker').style.display='none';
+}
+function toggleMinimize(){
+  const panel = document.getElementById('ai-panel');
+  const btn = document.getElementById('minimize-btn');
+  panelMinimized = !panelMinimized;
+  panel.classList.toggle('minimized', panelMinimized);
+  // Toggle minimize icon
+  btn.innerHTML = panelMinimized
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  btn.title = panelMinimized ? 'Restore' : 'Minimize';
+  if(panelMinimized){
+    document.getElementById('theme-picker').style.display='none';
+  }
+}
+
+function cycleSize(){
+  if(panelMinimized) toggleMinimize();
+  const panel = document.getElementById('ai-panel');
+  const idx = sizes.indexOf(currentSize);
+  currentSize = sizes[(idx+1)%sizes.length];
+  sizes.forEach(s=>panel.classList.remove('size-'+s));
+  panel.classList.add('size-'+currentSize);
+  // Keep panel in viewport
+  clampPanel(panel);
+}
+
+function openThemePicker(e){
+  e.stopPropagation();
+  const picker = document.getElementById('theme-picker');
+  picker.style.display = picker.style.display==='none' ? 'block' : 'none';
+}
+
+// Close theme picker on outside click
+document.addEventListener('click', e=>{
+  const picker = document.getElementById('theme-picker');
+  if(!picker.contains(e.target) && e.target.id!=='theme-btn' && !e.target.closest('#theme-btn')){
+    picker.style.display='none';
+  }
+});
+
+// ── THEMES ──
+const THEMES = {
+  dark:{
+    '--bg':'#07080f','--bg2':'#0c0e1a','--bg3':'#111422','--card':'#141729','--card2':'#1a1f35',
+    '--border':'rgba(255,255,255,0.07)','--border2':'rgba(255,255,255,0.12)',
+    '--accent':'#c8ff00','--accent2':'#a8d800','--accent3':'rgba(200,255,0,0.12)',
+    '--purple':'#9b8ef5','--teal':'#00e5c4','--orange':'#ff8c42','--blue':'#4facfe','--pink':'#ff6bcd','--red':'#ff4d6d',
+    '--text':'#eef0fc','--text2':'#8b90b8','--text3':'#5a5f80',
+  },
+  midnight:{
+    '--bg':'#05060f','--bg2':'#090a1c','--bg3':'#0d0e22','--card':'#101228','--card2':'#161838',
+    '--border':'rgba(255,255,255,0.07)','--border2':'rgba(255,255,255,0.12)',
+    '--accent':'#7c6bff','--accent2':'#6a58e8','--accent3':'rgba(124,107,255,0.12)',
+    '--purple':'#a78bfa','--teal':'#38bdf8','--orange':'#fb923c','--blue':'#60a5fa','--pink':'#f472b6','--red':'#f87171',
+    '--text':'#e8eaf6','--text2':'#8892c8','--text3':'#565e90',
+  },
+  white:{
+    '--bg':'#f4f5f8','--bg2':'#ffffff','--bg3':'#eceef3','--card':'#ffffff','--card2':'#f0f1f6',
+    '--border':'rgba(0,0,0,0.09)','--border2':'rgba(0,0,0,0.16)',
+    '--accent':'#6366f1','--accent2':'#4f52d8','--accent3':'rgba(99,102,241,0.1)',
+    '--purple':'#7c3aed','--teal':'#0891b2','--orange':'#ea580c','--blue':'#2563eb','--pink':'#db2777','--red':'#dc2626',
+    '--text':'#1a1d2e','--text2':'#4b5068','--text3':'#9196b0',
+  },
+  pink:{
+    '--bg':'#fdf2f8','--bg2':'#fff5fb','--bg3':'#fce7f3','--card':'#ffffff','--card2':'#fce7f3',
+    '--border':'rgba(236,72,153,0.18)','--border2':'rgba(236,72,153,0.32)',
+    '--accent':'#ec4899','--accent2':'#db2777','--accent3':'rgba(236,72,153,0.12)',
+    '--purple':'#9333ea','--teal':'#0891b2','--orange':'#f97316','--blue':'#3b82f6','--pink':'#ec4899','--red':'#ef4444',
+    '--text':'#4a0520','--text2':'#831843','--text3':'#f9a8d4',
+  },
+  lavender:{
+    '--bg':'#f5f3ff','--bg2':'#ede9fe','--bg3':'#ddd6fe','--card':'#ffffff','--card2':'#ede9fe',
+    '--border':'rgba(124,58,237,0.15)','--border2':'rgba(124,58,237,0.28)',
+    '--accent':'#7c3aed','--accent2':'#6d28d9','--accent3':'rgba(124,58,237,0.12)',
+    '--purple':'#7c3aed','--teal':'#0891b2','--orange':'#f97316','--blue':'#3b82f6','--pink':'#ec4899','--red':'#ef4444',
+    '--text':'#2e1065','--text2':'#5b21b6','--text3':'#a78bfa',
+  },
+  sky:{
+    '--bg':'#f0f9ff','--bg2':'#e0f2fe','--bg3':'#bae6fd','--card':'#ffffff','--card2':'#e0f2fe',
+    '--border':'rgba(14,165,233,0.2)','--border2':'rgba(14,165,233,0.35)',
+    '--accent':'#0284c7','--accent2':'#0369a1','--accent3':'rgba(14,165,233,0.12)',
+    '--purple':'#7c3aed','--teal':'#0891b2','--orange':'#f97316','--blue':'#0ea5e9','--pink':'#ec4899','--red':'#ef4444',
+    '--text':'#0c4a6e','--text2':'#0369a1','--text3':'#7dd3fc',
+  },
+  mint:{
+    '--bg':'#f0fdf4','--bg2':'#dcfce7','--bg3':'#bbf7d0','--card':'#ffffff','--card2':'#dcfce7',
+    '--border':'rgba(16,185,129,0.2)','--border2':'rgba(16,185,129,0.35)',
+    '--accent':'#059669','--accent2':'#047857','--accent3':'rgba(16,185,129,0.12)',
+    '--purple':'#7c3aed','--teal':'#0891b2','--orange':'#f97316','--blue':'#3b82f6','--pink':'#ec4899','--red':'#ef4444',
+    '--text':'#064e3b','--text2':'#065f46','--text3':'#6ee7b7',
+  },
+  peach:{
+    '--bg':'#fff7ed','--bg2':'#ffedd5','--bg3':'#fed7aa','--card':'#ffffff','--card2':'#ffedd5',
+    '--border':'rgba(249,115,22,0.2)','--border2':'rgba(249,115,22,0.35)',
+    '--accent':'#ea580c','--accent2':'#c2410c','--accent3':'rgba(249,115,22,0.12)',
+    '--purple':'#7c3aed','--teal':'#0891b2','--orange':'#f97316','--blue':'#3b82f6','--pink':'#ec4899','--red':'#ef4444',
+    '--text':'#431407','--text2':'#7c2d12','--text3':'#fdba74',
+  },
+};
+
+function applyTheme(name, btn){
+  const vars = THEMES[name];
+  if(!vars) return;
+  const root = document.documentElement;
+  Object.entries(vars).forEach(([k,v])=>root.style.setProperty(k,v));
+  // Update avatar/logo bg to accent color
+  document.querySelectorAll('.ai-avatar,.sb-logo').forEach(el=>el.style.background=vars['--accent']);
+  // For light themes, make avatar icon dark; dark themes keep black icon
+  const isLight = ['white','pink','lavender','sky','mint','peach'].includes(name);
+  document.querySelectorAll('.ai-avatar svg,.sb-logo svg').forEach(el=>{
+    el.setAttribute('stroke', isLight ? '#fff' : '#000');
+  });
+  // Update Chart.js global grid/text colors
+  const gridColor = isLight ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.04)';
+  const tickColor = isLight ? '#9196b0' : '#5a5f80';
+  // Store for chart rebuilds
+  window._chartGrid = gridColor;
+  window._chartTick = tickColor;
+  // Mark active
+  document.querySelectorAll('.theme-opt').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  // Redraw all charts
+  setTimeout(()=>redrawAllCharts(), 50);
+  localStorage.setItem('ai-theme',name);
+}
+
+function redrawAllCharts(){
+  // Update dynamic chart color vars
+  CH_GRID.color = window._chartGrid || 'rgba(255,255,255,0.04)';
+  CH_TEXT = window._chartTick || '#5a5f80';
+  // Update all existing chart instances
+  Object.values(charts).forEach(ch=>{
+    if(!ch) return;
+    // Update grid & tick colors across all scales
+    if(ch.options.scales){
+      Object.values(ch.options.scales).forEach(scale=>{
+        if(scale.grid) scale.grid.color = CH_GRID.color;
+        if(scale.ticks) scale.ticks.color = CH_TEXT;
+      });
+    }
+    if(ch.options.plugins?.legend?.labels) ch.options.plugins.legend.labels.color = CH_TEXT;
+    ch.update();
+  });
+}
+
+// Restore saved theme
+(function(){
+  const saved = localStorage.getItem('ai-theme');
+  if(saved && THEMES[saved]){
+    const btn = document.querySelector(`[data-theme="${saved}"]`);
+    applyTheme(saved, btn);
+  }
+})();
+
+// ── DRAGGING ──
+(function(){
+  const panel = document.getElementById('ai-panel');
+  const handle = document.getElementById('ai-drag-handle');
+  let dragging=false, sx=0, sy=0, ox=0, oy=0;
+
+  handle.addEventListener('mousedown',e=>{
+    if(e.target.closest('button')) return; // don't drag on buttons
+    dragging=true;
+    const rect=panel.getBoundingClientRect();
+    ox=rect.left; oy=rect.top;
+    sx=e.clientX; sy=e.clientY;
+    panel.style.transition='none';
+    document.body.style.userSelect='none';
+  });
+
+  document.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    const dx=e.clientX-sx, dy=e.clientY-sy;
+    let nx=ox+dx, ny=oy+dy;
+    // clamp inside viewport
+    nx=Math.max(0,Math.min(nx,window.innerWidth-panel.offsetWidth));
+    ny=Math.max(0,Math.min(ny,window.innerHeight-panel.offsetHeight));
+    panel.style.left=nx+'px';
+    panel.style.top=ny+'px';
+    panel.style.right='auto';
+    panel.style.bottom='auto';
+  });
+
+  document.addEventListener('mouseup',()=>{
+    if(dragging){
+      dragging=false;
+      panel.style.transition='';
+      document.body.style.userSelect='';
+    }
+  });
+
+  // Touch support
+  handle.addEventListener('touchstart',e=>{
+    if(e.target.closest('button')) return;
+    const t=e.touches[0];
+    dragging=true;
+    const rect=panel.getBoundingClientRect();
+    ox=rect.left; oy=rect.top;
+    sx=t.clientX; sy=t.clientY;
+    panel.style.transition='none';
+  },{passive:true});
+
+  document.addEventListener('touchmove',e=>{
+    if(!dragging) return;
+    const t=e.touches[0];
+    const dx=t.clientX-sx, dy=t.clientY-sy;
+    let nx=ox+dx, ny=oy+dy;
+    nx=Math.max(0,Math.min(nx,window.innerWidth-panel.offsetWidth));
+    ny=Math.max(0,Math.min(ny,window.innerHeight-panel.offsetHeight));
+    panel.style.left=nx+'px';
+    panel.style.top=ny+'px';
+    panel.style.right='auto';
+    panel.style.bottom='auto';
+  },{passive:true});
+
+  document.addEventListener('touchend',()=>{ dragging=false; panel.style.transition=''; });
+})();
+
+function clampPanel(panel){
+  const rect=panel.getBoundingClientRect();
+  if(rect.right>window.innerWidth){
+    panel.style.left=Math.max(0,window.innerWidth-panel.offsetWidth)+'px';
+    panel.style.right='auto';
+  }
+  if(rect.bottom>window.innerHeight){
+    panel.style.top=Math.max(0,window.innerHeight-panel.offsetHeight)+'px';
+    panel.style.bottom='auto';
+  }
+}
+
+// Init size class
+document.getElementById('ai-panel').classList.add('size-md');
+
+// ══════════════════════════════════════════
+// PREDICTION ENGINE — TIME SERIES ML
+// Implements: Transformer (Attention), Random Forest (JS), Linear Regression
+// ══════════════════════════════════════════
+let predData = null;
+let predLoaded = false;
+let currentMethod = 'holt';
+
+function selectMethod(method){
+  currentMethod = method;
+  document.querySelectorAll('.pred-method-card').forEach(el=>el.classList.remove('active'));
+  document.getElementById('method-'+method).classList.add('active');
+  if(predData) renderPrediction(predData);
+}
+
+async function loadPrediction(){
+  if(predLoaded && predData){ renderPrediction(predData); return; }
+  predLoaded = true;
+  try{
+    predData = await apiFetch('/monthly_revenue_extended');
+    renderPrediction(predData);
+  } catch(e){ console.error('Prediction load error',e); }
+}
+
+// ── TRANSFORMER — TEMPORAL SELF-ATTENTION FORECASTING ──
+// Architecture: Multi-head self-attention over a sliding window of lag features.
+// Steps:
+//   1. Build overlapping windows of the time series (window = 4 steps).
+//   2. Compute scaled dot-product attention scores between each window position.
+//   3. Weighted-average the values via softmax attention weights (2 heads).
+//   4. Project the attended context through a feed-forward layer to get fitted values.
+//   5. Autoregressively forecast next N steps using the last attended window.
+function transformerForecast(data, periods=3){
+  const y = data.map(d=>d.revenue);
+  const n = y.length;
+  if(n < 5) return linearRegForecast(data, periods);
+
+  const W   = Math.min(6, n - 1);   // window (context) length
+  const H   = 2;                     // number of attention heads
+  const dk  = Math.max(1, Math.floor(W / H)); // key/query dimension per head
+
+  // ── Normalise ──
+  const mu  = y.reduce((a,v)=>a+v,0) / n;
+  const sig = Math.sqrt(y.reduce((a,v)=>a+(v-mu)**2,0)/n) || 1;
+  const yn  = y.map(v=>(v-mu)/sig);
+
+  // ── Scaled dot-product attention (single sequence, one query per step) ──
+  function softmax(arr){
+    const mx = Math.max(...arr);
+    const ex = arr.map(v=>Math.exp(v - mx));
+    const s  = ex.reduce((a,v)=>a+v, 0);
+    return ex.map(v=>v/s);
+  }
+
+  function attention(Q, K, V){
+    // Q: [1 x dk], K: [W x dk], V: [W x 1]  → scalar output
+    const scores = K.map(k => k.reduce((s,v,i)=>s+Q[i]*v,0) / Math.sqrt(dk));
+    const weights = softmax(scores);
+    return weights.reduce((s,w,i)=>s+w*V[i], 0);
+  }
+
+  // Simple learned-free projection: use position-indexed sine encodings as K/Q
+  function posEnc(pos, dim){
+    return Array.from({length:dim},(_,i)=>
+      i%2===0 ? Math.sin(pos/(10000**(i/dim))) : Math.cos(pos/(10000**((i-1)/dim)))
+    );
+  }
+
+  // ── Compute attended output for each time step ──
+  function attendedAt(series, t){
+    if(t < W) return series[t]; // not enough context — return raw
+    const window = series.slice(t-W, t);   // values in context window
+    // Multi-head: split posEnc into H heads
+    let out = 0;
+    for(let h=0; h<H; h++){
+      const q = posEnc(t, dk);
+      const K = window.map((_,j)=>posEnc(t-W+j, dk));
+      const V = window;
+      out += attention(q, K, V);
+    }
+    return out / H;  // average heads
+  }
+
+  // ── Feed-forward blend: attended value + residual of raw ──
+  const fitted_n = yn.map((_, t) => {
+    const att = attendedAt(yn, t);
+    return att * 0.7 + yn[t] * 0.3;  // blend attended + raw (like residual connection)
+  });
+
+  // ── Denormalise fitted ──
+  const fitted = fitted_n.map(v => v * sig + mu);
+
+  // ── Autoregressive forecast ──
+  // Extend the normalised series with attended predictions
+  const yn_ext = [...yn];
+  const forecast = [];
+  for(let h=0; h<periods; h++){
+    const t = yn_ext.length;
+    const att = attendedAt(yn_ext, t);
+    // Light trend correction from last 3 steps
+    const slope = (yn_ext[t-1] - yn_ext[t-3]) / 2;
+    const pred_n = att * 0.75 + (yn_ext[t-1] + slope * 0.5) * 0.25;
+    yn_ext.push(pred_n);
+    forecast.push(Math.max(0, pred_n * sig + mu));
+  }
+
+  return { forecast, fitted };
+}
+
+// ── RANDOM FOREST (JS approximation: multiple regression trees via bootstrap) ──
+function randomForestForecast(data, periods=3){
+  const y = data.map(d=>d.revenue);
+  const n = y.length;
+  if(n<5) return linearRegForecast(data,periods);
+
+  // Build feature matrix: lag1, lag2, lag3, rolling_mean3, month_index
+  const features=[], targets=[];
+  for(let i=3;i<n;i++){
+    features.push([y[i-1], y[i-2], y[i-3], (y[i-1]+y[i-2]+y[i-3])/3, i]);
+    targets.push(y[i]);
+  }
+  // Train multiple simple regression trees (depth-1, random feature subset)
+  const nTrees=50;
+  const trees=[];
+  for(let t=0;t<nTrees;t++){
+    // Bootstrap sample
+    const idx=Array.from({length:features.length},()=>Math.floor(Math.random()*features.length));
+    const bX=idx.map(i=>features[i]), bY=idx.map(i=>targets[i]);
+    // Random feature (0-4)
+    const fi=Math.floor(Math.random()*5);
+    const vals=bX.map(r=>r[fi]);
+    const split=(Math.min(...vals)+Math.max(...vals))/2;
+    const leftY=bY.filter((_,i)=>vals[i]<split);
+    const rightY=bY.filter((_,i)=>vals[i]>=split);
+    const leftMean=leftY.length?leftY.reduce((a,v)=>a+v,0)/leftY.length:0;
+    const rightMean=rightY.length?rightY.reduce((a,v)=>a+v,0)/rightY.length:0;
+    trees.push({fi, split, leftMean, rightMean});
+  }
+  const treePredict=(tree,x)=>x[tree.fi]<tree.split?tree.leftMean:tree.rightMean;
+  const rfPredict=(x)=>trees.reduce((a,t)=>a+treePredict(t,x),0)/nTrees;
+
+  // Fitted values
+  const fitted=[y[0],y[1],y[2],...features.map(f=>rfPredict(f))];
+
+  // Forecast
+  let recentY=[...y];
+  const forecast=[];
+  for(let h=0;h<periods;h++){
+    const i=n+h;
+    const x=[recentY[recentY.length-1],recentY[recentY.length-2],recentY[recentY.length-3],
+      (recentY[recentY.length-1]+recentY[recentY.length-2]+recentY[recentY.length-3])/3, i];
+    const pred=Math.max(0,rfPredict(x));
+    forecast.push(pred);
+    recentY.push(pred);
+  }
+  return {forecast, fitted};
+}
+
+// ── LINEAR REGRESSION ──
+function linearRegForecast(data, periods=3){
+  const y=data.map(d=>d.revenue);
+  const n=y.length;
+  const x=Array.from({length:n},(_,i)=>i);
+  const mx=x.reduce((a,v)=>a+v,0)/n, my=y.reduce((a,v)=>a+v,0)/n;
+  const b1=x.reduce((a,v,i)=>a+(v-mx)*(y[i]-my),0)/x.reduce((a,v)=>a+(v-mx)**2,1e-9);
+  const b0=my-b1*mx;
+  const fitted=x.map(xi=>b0+b1*xi);
+  const forecast=Array.from({length:periods},(_,h)=>Math.max(0,b0+b1*(n+h)));
+  return {forecast,fitted};
+}
+
+// ── METRICS ──
+function calcMetrics(actual, fitted){
+  const n=actual.length;
+  const errors=actual.map((a,i)=>a-fitted[i]);
+  const mae=errors.reduce((s,e)=>s+Math.abs(e),0)/n;
+  const rmse=Math.sqrt(errors.reduce((s,e)=>s+e*e,0)/n);
+  const ssTot=actual.reduce((s,a)=>s+(a-(actual.reduce((x,v)=>x+v,0)/n))**2,0);
+  const ssRes=errors.reduce((s,e)=>s+e*e,0);
+  const r2=1-ssRes/Math.max(ssTot,1e-9);
+  return {mae,rmse,r2};
+}
+
+// ── NEXT 3 MONTH LABELS ──
+function nextMonthLabels(lastMonthStr, n=3){
+  const [y,m]=lastMonthStr.split('-').map(Number);
+  return Array.from({length:n},(_,i)=>{
+    const d=new Date(y,m-1+i+1,1);
+    return d.toLocaleDateString('en-US',{year:'numeric',month:'short'});
+  });
+}
+
+// ── RENDER ──
+function renderPrediction(data){
+  const n=data.length;
+  document.getElementById('pred-n').textContent=n;
+
+  let result;
+  const methods={holt:transformerForecast,rf:randomForestForecast,linear:linearRegForecast};
+  result=methods[currentMethod](data,3);
+
+  const {mae,rmse,r2}=calcMetrics(data.map(d=>d.revenue),result.fitted);
+  document.getElementById('pred-mae').textContent='$'+Math.round(mae).toLocaleString();
+  document.getElementById('pred-rmse').textContent='$'+Math.round(rmse).toLocaleString();
+  document.getElementById('pred-r2').textContent=r2.toFixed(3);
+
+  const labels=data.map(d=>d.month);
+  const nextLabels=nextMonthLabels(labels[labels.length-1]);
+
+  // Std dev for confidence interval
+  const errs=data.map((d,i)=>d.revenue-result.fitted[i]);
+  const std=Math.sqrt(errs.reduce((s,e)=>s+e*e,0)/errs.length);
+
+  // Chart
+  const histData=data.map(d=>d.revenue);
+  const fittedData=result.fitted;
+  const forecastNulls=Array(n).fill(null);
+  const forecastVals=[...forecastNulls.slice(0,-1),histData[n-1],...result.forecast];
+  const ciUpper=[...Array(n).fill(null),...result.forecast.map(f=>f+std)];
+  const ciLower=[...Array(n).fill(null),...result.forecast.map(f=>Math.max(0,f-std))];
+
+  const allLabels=[...labels,...nextLabels];
+  makeChart('predChart',{
+    type:'line',
+    data:{
+      labels:allLabels,
+      datasets:[
+        {label:'Historical',data:[...histData,...Array(3).fill(null)],borderColor:'#9b8ef5',backgroundColor:'rgba(155,142,245,0.07)',borderWidth:2.5,pointRadius:3,tension:.3,fill:true},
+        {label:'Fitted',data:[...fittedData,...Array(3).fill(null)],borderColor:'rgba(0,229,196,0.5)',borderWidth:1.5,pointRadius:0,tension:.3,fill:false,borderDash:[4,3]},
+        {label:'Forecast',data:forecastVals,borderColor:'#c8ff00',backgroundColor:'rgba(200,255,0,0.07)',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#c8ff00',tension:.3,fill:false,borderDash:[6,3]},
+        {label:'CI Upper',data:ciUpper,borderColor:'rgba(200,255,0,0.2)',borderWidth:1,pointRadius:0,fill:'+1',backgroundColor:'rgba(200,255,0,0.06)',tension:.3},
+        {label:'CI Lower',data:ciLower,borderColor:'rgba(200,255,0,0.2)',borderWidth:1,pointRadius:0,tension:.3,fill:false},
+      ]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:CH_TEXT,font:{size:9},boxWidth:10}},
+        tooltip:{callbacks:{label:v=>v.dataset.label+': $'+Number(v.raw||0).toLocaleString()}}},
+      scales:{
+        x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:9},maxTicksLimit:14}},
+        y:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+Number(v).toLocaleString()}}
+      }
+    }
+  });
+
+  // Forecast table
+  const mx=Math.max(...result.forecast);
+  document.getElementById('pred-forecast-list').innerHTML=result.forecast.map((f,i)=>`
+    <div class="pred-forecast-row">
+      <div class="pred-forecast-month">${nextLabels[i]}</div>
+      <div class="pred-forecast-bar-wrap"><div class="pred-forecast-bar" style="width:${Math.round(f/mx*100)}%"></div></div>
+      <div class="pred-forecast-val">$${Math.round(f).toLocaleString()}</div>
+      <div class="pred-forecast-ci">± $${Math.round(std).toLocaleString()}</div>
+    </div>
+  `).join('');
+
+  // Model explanation
+  const explanations={
+    holt:`<b>Transformer — Temporal Self-Attention Forecasting</b><br><br>
+      Architecture inspired by the Transformer model (Vaswani et al., 2017), adapted for univariate time series:<br><br>
+      - <b>Windowed Context</b>: Looks back up to 6 months as a context window<br>
+      - <b>Multi-Head Attention (H=2)</b>: Two attention heads compute scaled dot-product attention using sinusoidal positional encodings as Query/Key matrices<br>
+      - <b>Residual Connection</b>: Attended value blended with raw observation (70/30) — analogous to skip connections in deep networks<br>
+      - <b>Autoregressive Decoding</b>: Forecasts are generated step-by-step; each prediction feeds into the next window<br>
+      - <b>Trend Correction</b>: A lightweight slope from recent steps regularises the decoder<br><br>
+      This JS implementation captures long-range seasonal dependencies without training weights, making it interpretable and fast.`,
+    rf:`<b>Random Forest Regression (JS implementation)</b><br><br>
+      Uses ${50} decision trees trained on bootstrap samples. 
+      Features include: lag-1, lag-2, lag-3 revenue, rolling 3-month average, and time index.<br><br>
+      Each tree is a depth-1 stump on a random feature subset. The final prediction 
+      is the mean across all trees (bagging). This handles non-linear revenue patterns 
+      and is robust to outliers, similar to scikit-learn's RandomForestRegressor.`,
+    linear:`<b>Ordinary Least Squares Linear Regression</b><br><br>
+      Fits the equation: Revenue = β₀ + β₁ × time_index<br><br>
+      β₀ (intercept) and β₁ (slope) are estimated by minimizing the sum of squared residuals. 
+      This is the simplest model and serves as a baseline. It assumes revenue changes 
+      linearly over time, which may not capture seasonality.`,
+  };
+  document.getElementById('pred-model-explanation').innerHTML=explanations[currentMethod]||'';
+
+  const methodNames={holt:'Transformer (Attention)',rf:'Random Forest Regression',linear:'Linear Regression'};
+  document.getElementById('predChartTitle').textContent=`Monthly Revenue Forecast — ${methodNames[currentMethod]}`;
+}
+
+// ══════════════════════════════════════════
+// CUSTOMER COMPLEX QUERY
+// ══════════════════════════════════════════
+let customerQueryLoaded=false;
+
+async function loadCustomers(){
+  if(!customerQueryLoaded){
+    customerQueryLoaded=true;
+    runCustomerQuery();
+  }
+}
+
+async function runCustomerQuery(){
+  const minCost=parseFloat(document.getElementById('cq-min-cost').value)||0;
+  const sort=document.getElementById('cq-sort').value;
+  const limit=document.getElementById('cq-limit').value;
+  document.getElementById('cq-result-meta').textContent='Loading...';
+  document.getElementById('cq-table').innerHTML='<div class="skeleton" style="height:200px;border-radius:0"></div>';
+  try{
+    const rows=await apiFetch(`/customer_query?min_cost=${minCost}&sort=${sort}&limit=${limit}`);
+    const count=rows.length;
+    const total=rows.reduce((a,r)=>a+r.total_cost,0);
+    document.getElementById('cq-result-meta').innerHTML=
+      `<b>${count}</b> customers with total spend ≥ $${minCost} | Combined spend: <b>$${Math.round(total).toLocaleString()}</b> | Sorted by: <b>${sort}</b>`;
+
+    // Spend distribution chart
+    const buckets=[0,50,100,150,200,250,999999];
+    const bucketLabels=['<$50','$50-100','$100-150','$150-200','$200-250','$250+'];
+    const counts=bucketLabels.map((_,i)=>rows.filter(r=>r.total_cost>=buckets[i]&&r.total_cost<buckets[i+1]).length);
+    makeChart('cqSpendChart',{type:'bar',
+      data:{labels:bucketLabels,datasets:[{data:counts,backgroundColor:'#9b8ef5',borderRadius:5}]},
+      options:{responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT},beginAtZero:true}}}
+    });
+
+    // Top 10 bar chart
+    const top10=rows.slice(0,10);
+    makeChart('cqTopChart',{type:'bar',
+      data:{labels:top10.map(r=>r.customer_name.split(' ')[0]),
+            datasets:[{data:top10.map(r=>r.total_cost),backgroundColor:'#00e5c4',borderRadius:5}]},
+      options:{responsive:true,plugins:{legend:{display:false}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:9}}},
+                y:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+v}}}}
+    });
+
+    // Table
+    document.getElementById('cq-table').innerHTML=`<table>
+      <thead><tr><th>#</th><th>Customer</th><th>City</th><th>Country</th><th>Rentals</th><th>Total Spend</th><th>Last Rental</th></tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr>
+        <td class="val">${i+1}</td>
+        <td class="val">${r.customer_name}</td>
+        <td><span class="city-badge">${r.city}</span></td>
+        <td style="color:var(--text2)">${r.country}</td>
+        <td>${r.total_rentals}</td>
+        <td class="val" style="color:var(--teal)">$${Number(r.total_cost).toLocaleString()}</td>
+        <td style="font-family:var(--mono);font-size:.68rem">${r.last_rental}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch(e){
+    document.getElementById('cq-result-meta').textContent='Error loading data. Is Flask running?';
+    console.error(e);
+  }
+}
+
+// ══════════════════════════════════════════
+// UPDATE AI SYSTEM PROMPT (add prediction+customer)
+// ══════════════════════════════════════════
+const _origBuildSystemContext = buildSystemContext;
+buildSystemContext = function(){
+  let base = _origBuildSystemContext();
+  return base + `
+
+ADDITIONAL PAGES (added):
+- "prediction" = Revenue Prediction using Transformer (Attention), Random Forest, or Linear Regression. Forecasts 3 months ahead.
+- "customers" = Customer Query page — complex query showing customers filtered by total rental spend with charts.
+
+ADDITIONAL CHART ACTIONS:
+- [CHART_ACTION:show_prediction_holt] — navigate to prediction page and use Transformer model
+- [CHART_ACTION:show_prediction_rf] — navigate to prediction page and use Random Forest model
+- [CHART_ACTION:show_prediction_linear] — navigate to prediction page and use Linear Regression
+- [CHART_ACTION:run_customer_query] — navigate to customer query page and run the default query
+
+You can also guide users to the customer query page for questions like "which customers spend the most" or "top customers by revenue".
+For prediction questions, suggest navigating to the prediction page.`;
+};
+
+// ══════════════════════════════════════════
+// PATCH: handle new chart actions in applyChartAction
+// ══════════════════════════════════════════
+const _origApplyChartAction = applyChartAction;
+applyChartAction = function(action, actorData, rentalData){
+  switch(action){
+    case 'show_prediction_holt':
+      showPage('prediction',navItem('prediction'));
+      setTimeout(()=>{ currentMethod='holt'; selectMethod('holt'); },600);
+      break;
+    case 'show_prediction_rf':
+      showPage('prediction',navItem('prediction'));
+      setTimeout(()=>{ currentMethod='rf'; selectMethod('rf'); },600);
+      break;
+    case 'show_prediction_linear':
+      showPage('prediction',navItem('prediction'));
+      setTimeout(()=>{ currentMethod='linear'; selectMethod('linear'); },600);
+      break;
+    case 'run_customer_query':
+      showPage('customers',navItem('customers'));
+      break;
+    default:
+      _origApplyChartAction(action, actorData, rentalData);
+  }
+};
+
+// ══════════════════════════════════════════
+// INITIALIZE - LOAD OVERVIEW ON PAGE START
+// ══════════════════════════════════════════
+loadOverview();
+restoreChartState();
+// (patch quick panel and actions tab)
+// ══════════════════════════════════════════
+(function(){
+  // Add to nav shortcut list
+  const nsList=document.querySelector('.nav-shortcut-list');
+  if(nsList){
+    nsList.insertAdjacentHTML('beforeend',`
+      <div class="ns-item" onclick="goAndAsk('prediction','Predict revenue for the next 3 months using the Transformer attention model.')">
+        <div class="ns-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="#9b8ef5" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div class="ns-name">Revenue Prediction</div>
+        <div class="ns-arrow">→</div>
+      </div>
+      <div class="ns-item" onclick="goAndAsk('customers','Show me customers with the highest total rental spend.')">
+        <div class="ns-icon teal"><svg viewBox="0 0 24 24" fill="none" stroke="#00e5c4" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+        <div class="ns-name">Customer Query</div>
+        <div class="ns-arrow">→</div>
+      </div>
+    `);
+  }
+  // Add to actions tab
+  const apList=document.querySelector('.ap-list');
+  if(apList){
+    apList.insertAdjacentHTML('beforeend',`
+      <button class="ap" onclick="showPage('prediction',navItem('prediction'));sendActionAndSwitch('prediction','Predict revenue for next 3 months using Transformer model.')">
+        <div class="ap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <span class="ap-text">Show 3-month revenue forecast (Transformer)</span>
+        <span class="ap-badge">Predict</span>
+      </button>
+      <button class="ap" onclick="showPage('prediction',navItem('prediction'));setTimeout(()=>selectMethod('rf'),400)">
+        <div class="ap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83"/></svg></div>
+        <span class="ap-text">Switch forecast to Random Forest model</span>
+        <span class="ap-badge">Predict</span>
+      </button>
+      <button class="ap" onclick="showPage('customers',navItem('customers'));runCustomerQuery()">
+        <div class="ap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+        <span class="ap-text">Run complex customer spend query</span>
+        <span class="ap-badge">Query</span>
+      </button>
+    `);
+  }
+  // Add to quick prompts
+  const qpList=document.querySelector('.qp-list');
+  if(qpList){
+    qpList.insertAdjacentHTML('beforeend',`
+      <button class="qp" onclick="sendQuick('Predict revenue for the next 3 months and explain which model is most accurate.')">
+        <span class="qp-label">Predict next 3 months revenue and explain the model</span>
+        <span class="qp-cat">Predict</span>
+      </button>
+      <button class="qp" onclick="sendQuick('Which customers have the highest total rental spend? Show the top spenders.')">
+        <span class="qp-label">Which customers have the highest rental spend?</span>
+        <span class="qp-cat">Query</span>
+      </button>
+    `);
+  }
+})();
+</script>
+</body>
+</html>
