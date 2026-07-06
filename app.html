@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Movie Analytics Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f1a;--bg2:#131625;--bg3:#1a1e35;--card:#1e2340;--card2:#232848;
+  --border:#2d3260;--accent:#7c6af7;--accent2:#a89bff;--teal:#00d4a8;
+  --orange:#ff9445;--blue:#4facfe;--pink:#ff6b9d;--red:#ff4757;
+  --text:#e8eaf6;--text2:#9da3c8;--text3:#6b729e;
+  --font:'DM Sans',sans-serif;--font2:'Space Grotesk',sans-serif;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow-x:hidden}
+
+/* ─── SIDEBAR ─── */
+#sidebar{width:240px;min-height:100vh;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sb-brand{padding:22px 18px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:11px}
+.sb-logo{width:36px;height:36px;background:linear-gradient(135deg,#7c6af7,#a89bff);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sb-logo svg{width:18px;height:18px}
+.sb-brand-text .t1{font-family:var(--font2);font-size:.9rem;font-weight:700;color:var(--text)}
+.sb-brand-text .t2{font-size:.65rem;color:var(--text3);margin-top:1px}
+.sb-section{padding:14px 10px 6px;font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--text3)}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;margin:1px 6px;border-radius:8px;cursor:pointer;transition:background .15s,color .15s;font-size:.82rem;color:var(--text2)}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:.7}
+.nav-item:hover{background:var(--card);color:var(--text)}
+.nav-item.active{background:rgba(124,106,247,.18);color:var(--accent2)}
+.nav-item.active svg{opacity:1}
+.sb-tip{margin:12px 10px;background:rgba(124,106,247,.08);border:1px solid rgba(124,106,247,.2);border-radius:9px;padding:10px 12px;font-size:.72rem;color:var(--accent2);line-height:1.5}
+.sb-footer{margin-top:auto;padding:12px 14px;font-size:.65rem;color:var(--text3);text-align:center;border-top:1px solid var(--border)}
+
+/* ─── DB STATUS ─── */
+.db-status{margin:8px 10px;padding:8px 12px;border-radius:8px;font-size:.7rem;display:flex;align-items:center;gap:7px;border:1px solid}
+.db-status.ok{background:rgba(0,212,168,.08);border-color:rgba(0,212,168,.2);color:var(--teal)}
+.db-status.err{background:rgba(255,71,87,.08);border-color:rgba(255,71,87,.2);color:var(--red)}
+.db-status.loading{background:rgba(124,106,247,.08);border-color:rgba(124,106,247,.2);color:var(--accent2)}
+.db-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.db-status.ok .db-dot{background:var(--teal);animation:pulse 2s infinite}
+.db-status.err .db-dot{background:var(--red)}
+.db-status.loading .db-dot{background:var(--accent2);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ─── MAIN ─── */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{padding:18px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
+.topbar-left .page-title{font-family:var(--font2);font-size:1.2rem;font-weight:700;color:var(--text)}
+.topbar-left .page-sub{font-size:.75rem;color:var(--text3);margin-top:2px}
+.date-chip{font-size:.72rem;color:var(--text2);background:var(--card);padding:6px 12px;border-radius:20px;border:1px solid var(--border)}
+.content{flex:1;overflow-y:auto;padding:22px 28px 40px}
+
+/* ─── LOADING SKELETON ─── */
+.skeleton{background:linear-gradient(90deg,var(--card) 25%,var(--card2) 50%,var(--card) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ─── STAT CARDS ─── */
+.cards-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.sc{border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;cursor:default}
+.sc.purple{background:rgba(124,106,247,.12);border:1px solid rgba(124,106,247,.25)}
+.sc.teal{background:rgba(0,212,168,.1);border:1px solid rgba(0,212,168,.2)}
+.sc.orange{background:rgba(255,148,69,.1);border:1px solid rgba(255,148,69,.2)}
+.sc.blue{background:rgba(79,172,254,.1);border:1px solid rgba(79,172,254,.2)}
+.sc-label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px}
+.sc-value{font-family:var(--font2);font-size:1.65rem;font-weight:700;line-height:1}
+.sc.purple .sc-value{color:#a89bff}
+.sc.teal .sc-value{color:#00d4a8}
+.sc.orange .sc-value{color:#ff9445}
+.sc.blue .sc-value{color:#4facfe}
+.sc-sub{font-size:.7rem;color:var(--text3);margin-top:5px}
+.sc-wm{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-family:var(--font2);font-size:2.2rem;font-weight:700;opacity:.07;color:var(--text)}
+
+/* ─── KPI ─── */
+.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;align-items:flex-start;gap:13px}
+.kpi-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.kpi-icon.purple{background:rgba(124,106,247,.15)}
+.kpi-icon.teal{background:rgba(0,212,168,.1)}
+.kpi-icon.red{background:rgba(255,71,87,.1)}
+.kpi-icon svg{width:16px;height:16px}
+.kpi-label{font-size:.7rem;color:var(--text3);margin-bottom:4px}
+.kpi-val{font-family:var(--font2);font-size:1.2rem;font-weight:600;color:var(--text)}
+.kpi-hint{font-size:.68rem;color:var(--text3);margin-top:2px}
+
+/* ─── WHITE CARDS ─── */
+.wc{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px}
+.wc-title{font-family:var(--font2);font-size:.88rem;font-weight:600;color:var(--text);margin-bottom:2px}
+.wc-sub{font-size:.7rem;color:var(--text3);margin-bottom:14px}
+.row-2{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
+.row-2b{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+
+/* ─── MILESTONE LIST ─── */
+.ms-item{display:flex;align-items:center;gap:10px;padding:6px 0}
+.ms-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ms-name{font-size:.78rem;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ms-count{font-size:.68rem;color:var(--text3)}
+.ms-bar-wrap{width:70px;background:rgba(255,255,255,.06);border-radius:4px;height:5px;overflow:hidden}
+.ms-bar{height:5px;border-radius:4px}
+.ms-amt{font-size:.75rem;font-weight:600;min-width:54px;text-align:right}
+
+/* ─── RATING LEGEND ─── */
+.rating-legend{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;padding:10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border)}
+.rl-item{display:flex;align-items:center;gap:6px;font-size:.7rem;color:var(--text2)}
+.rl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ─── FEATURE CARDS ─── */
+.section-title{font-family:var(--font2);font-size:.85rem;font-weight:600;color:var(--text);margin:8px 0 12px}
+.fc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.fc{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:border-color .2s,transform .15s}
+.fc:hover{border-color:var(--accent);transform:translateY(-2px)}
+.fc-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.fc-icon.purple{background:rgba(124,106,247,.15)}
+.fc-icon.teal{background:rgba(0,212,168,.1)}
+.fc-icon.orange{background:rgba(255,148,69,.1)}
+.fc-icon.pink{background:rgba(255,107,157,.1)}
+.fc-icon svg{width:16px;height:16px}
+.fc-title{font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:4px}
+.fc-desc{font-size:.7rem;color:var(--text3);line-height:1.5}
+.fc-badge{display:inline-block;margin-top:8px;padding:3px 9px;border-radius:20px;font-size:.63rem;font-weight:600;background:rgba(0,212,168,.1);color:var(--teal);border:1px solid rgba(0,212,168,.2)}
+
+/* ─── PAGE SECTIONS ─── */
+.page-section{display:none}
+.page-section.active{display:block}
+
+/* ─── FEATURE HERO ─── */
+.feat-hero{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between}
+.feat-hero h2{font-family:var(--font2);font-size:1.05rem;font-weight:700;color:var(--text);margin-bottom:4px}
+.feat-hero p{font-size:.75rem;color:var(--text3)}
+.back-btn{background:rgba(124,106,247,.12);border:1px solid rgba(124,106,247,.3);color:var(--accent2);font-size:.75rem;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:var(--font)}
+.back-btn:hover{background:rgba(124,106,247,.22)}
+
+/* ─── FILTERS ─── */
+.filter-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.filter-select{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:.75rem;padding:7px 12px;border-radius:8px;font-family:var(--font);cursor:pointer;outline:none}
+.filter-select:focus{border-color:var(--accent)}
+
+/* ─── TABLES ─── */
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+thead th{background:var(--bg3);color:var(--text3);font-weight:600;padding:10px 14px;text-align:left;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em}
+tbody tr{border-top:1px solid var(--border)}
+tbody tr:hover{background:rgba(255,255,255,.025)}
+tbody td{padding:10px 14px;color:var(--text2)}
+tbody td.val{color:var(--text);font-weight:500}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.65rem;font-weight:600}
+.badge.g{background:rgba(26,184,73,.12);color:#1ab849}
+.badge.pg{background:rgba(79,172,254,.12);color:#4facfe}
+.badge.pg13{background:rgba(255,148,69,.12);color:#ff9445}
+.badge.r{background:rgba(255,71,87,.12);color:#ff4757}
+.badge.nc17{background:rgba(160,90,220,.12);color:#a05adc}
+
+/* ─── AI PANEL ─── */
+#ai-panel{width:320px;min-height:100vh;background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.ai-header{padding:18px 16px 14px;border-bottom:1px solid var(--border)}
+.ai-header-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.ai-avatar{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#7c6af7,#a89bff);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ai-avatar svg{width:16px;height:16px}
+.ai-title{font-family:var(--font2);font-size:.88rem;font-weight:700;color:var(--text)}
+.ai-status{display:flex;align-items:center;gap:5px;font-size:.65rem;color:var(--teal)}
+.ai-dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
+.ai-desc{font-size:.7rem;color:var(--text3);line-height:1.45}
+
+/* GEMINI BADGE */
+.gemini-badge{padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(66,133,244,.06);display:flex;align-items:center;gap:8px;font-size:.7rem;color:#4285f4;border-left:2px solid #4285f4}
+.gemini-badge svg{width:14px;height:14px;flex-shrink:0}
+
+/* Quick prompts */
+.ai-quick{padding:10px 12px;border-bottom:1px solid var(--border)}
+.ai-quick-label{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:7px}
+.qp-grid{display:flex;flex-direction:column;gap:5px}
+.qp{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:.72rem;color:var(--text2);cursor:pointer;transition:background .15s,border-color .15s;line-height:1.4;text-align:left}
+.qp:hover{background:var(--card2);border-color:var(--accent);color:var(--text)}
+
+/* Nav section for AI */
+.ai-nav-section{padding:8px 12px;border-bottom:1px solid var(--border)}
+.ai-nav-label{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:7px}
+.ai-nav-items{display:flex;flex-direction:column;gap:4px}
+.ai-nav-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:.75rem;color:var(--text2);cursor:pointer;border:1px solid transparent;transition:all .15s}
+.ai-nav-item:hover{background:var(--card);border-color:var(--border);color:var(--text)}
+.ai-nav-item svg{width:13px;height:13px;flex-shrink:0;opacity:.7}
+
+/* Chat area */
+.ai-chat{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:100%;animation:fadeUp .25s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{align-self:flex-end}
+.msg.ai{align-self:flex-start}
+.msg-bubble{padding:9px 12px;border-radius:10px;font-size:.77rem;line-height:1.55}
+.msg.user .msg-bubble{background:rgba(124,106,247,.2);border:1px solid rgba(124,106,247,.3);color:var(--text);border-bottom-right-radius:3px}
+.msg.ai .msg-bubble{background:var(--card);border:1px solid var(--border);color:var(--text2);border-bottom-left-radius:3px}
+.msg.ai .msg-bubble b{color:var(--text)}
+.msg-time{font-size:.6rem;color:var(--text3);margin-top:3px;text-align:right}
+.msg.ai .msg-time{text-align:left}
+
+/* Typing indicator */
+.typing-indicator{display:none;align-self:flex-start}
+.typing-indicator.show{display:flex}
+.typing-bubble{background:var(--card);border:1px solid var(--border);border-radius:10px;border-bottom-left-radius:3px;padding:10px 14px;display:flex;gap:4px;align-items:center}
+.typing-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:typing 1.2s infinite}
+.typing-dot:nth-child(2){animation-delay:.2s}
+.typing-dot:nth-child(3){animation-delay:.4s}
+@keyframes typing{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+
+/* Input area */
+.ai-input-area{padding:10px 12px 14px;border-top:1px solid var(--border)}
+.ai-input-wrap{display:flex;gap:7px;align-items:flex-end}
+.ai-textarea{flex:1;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:.77rem;font-family:var(--font);padding:9px 11px;resize:none;outline:none;transition:border-color .15s;min-height:38px;max-height:120px;line-height:1.45}
+.ai-textarea:focus{border-color:var(--accent)}
+.ai-textarea::placeholder{color:var(--text3)}
+.ai-send{width:36px;height:36px;background:rgba(124,106,247,.2);border:1px solid rgba(124,106,247,.35);border-radius:9px;color:var(--accent2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
+.ai-send:hover{background:rgba(124,106,247,.35)}
+.ai-send svg{width:15px;height:15px}
+.ai-hint{font-size:.62rem;color:var(--text3);margin-top:6px;text-align:center}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+@media(max-width:1200px){.cards-row{grid-template-columns:repeat(2,1fr)}.fc-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:900px){#ai-panel{display:none}#sidebar{width:56px}.sb-brand-text,.nav-item span,.sb-tip,.sb-footer,.sb-section{display:none}.nav-item{justify-content:center;padding:12px}.sb-brand{justify-content:center;padding:14px 0}}
+</style>
+</head>
+<body>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside id="sidebar">
+  <div class="sb-brand">
+    <div class="sb-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/>
+        <line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/>
+      </svg>
+    </div>
+    <div class="sb-brand-text">
+      <div class="t1">Movie Analytics</div>
+      <div class="t2">dvdrental · PostgreSQL</div>
+    </div>
+  </div>
+
+  <!-- DB connection status -->
+  <div class="db-status loading" id="db-status">
+    <div class="db-dot"></div>
+    <span id="db-status-text">Connecting to DB…</span>
+  </div>
+
+  <div class="sb-section">Main Menu</div>
+  <div class="nav-item active" onclick="showPage('overview',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    <span>Executive Summary</span>
+  </div>
+  <div class="nav-item" onclick="showPage('content',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    <span>Content Performance</span>
+  </div>
+  <div class="nav-item" onclick="showPage('genre',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8.56 2.75c4.37 6.03 6.02 9.42 8.03 17.72m2.54-15.38c-3.72 4.35-8.94 5.66-16.88 5.85m19.5 1.9c-3.5-.93-6.63-.82-8.94 0-2.58.92-5.01 2.86-7.44 6.32"/></svg>
+    <span>Genre &amp; Audience</span>
+  </div>
+  <div class="nav-item" onclick="showPage('rental',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span>Rental Behavior</span>
+  </div>
+  <div class="nav-item" onclick="showPage('actor',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <span>Actor &amp; Cast Power</span>
+  </div>
+  <div class="sb-tip">
+    <b>Tip</b><br>Enter your Claude API key in the AI panel, then ask questions about any data shown here.
+  </div>
+  <div class="sb-footer">Movie Analytics · dvdrental · v2.0</div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<main id="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="page-title" id="page-title-text">Executive Summary</div>
+      <div class="page-sub" id="page-sub-text">Movie rental performance at a glance</div>
+    </div>
+    <div class="date-chip" id="date-chip"></div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── OVERVIEW ── -->
+    <div class="page-section active" id="page-overview">
+      <div class="cards-row">
+        <div class="sc purple"><div class="sc-label">Total Revenue</div><div class="sc-value" id="ov-revenue">—</div><div class="sc-sub">All-time payment income</div><div class="sc-wm">$</div></div>
+        <div class="sc teal"><div class="sc-label">Total Rentals</div><div class="sc-value" id="ov-rentals">—</div><div class="sc-sub">Total transactions</div><div class="sc-wm">#</div></div>
+        <div class="sc orange"><div class="sc-label">Film Catalog</div><div class="sc-value" id="ov-films">—</div><div class="sc-sub">Unique titles in inventory</div><div class="sc-wm">F</div></div>
+        <div class="sc blue"><div class="sc-label">Active Customers</div><div class="sc-value" id="ov-customers">—</div><div class="sc-sub">Customers who rented</div><div class="sc-wm">C</div></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-icon purple">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#a89bff" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          </div>
+          <div><div class="kpi-label">Avg Revenue / Rental</div><div class="kpi-val" id="ov-avg-rental">—</div><div class="kpi-hint" id="ov-avg-rental-hint">Loading…</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-icon teal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#00d4a8" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+          </div>
+          <div><div class="kpi-label">Avg Revenue / Film</div><div class="kpi-val" id="ov-avg-film">—</div><div class="kpi-hint">Across all titles</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-icon red">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#ff4757" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div><div class="kpi-label">Dead Stock Films</div><div class="kpi-val" id="ov-dead">—</div><div class="kpi-hint">Films with zero rentals</div></div>
+        </div>
+      </div>
+      <div class="row-2">
+        <div class="wc">
+          <div class="wc-title">Monthly Revenue Trend</div>
+          <div class="wc-sub">Total payment income per month</div>
+          <canvas id="trendChart" height="180"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Top 5 Films by Revenue</div>
+          <div class="wc-sub">Highest earning titles from your DB</div>
+          <div id="top5list"><div class="skeleton" style="height:120px"></div></div>
+        </div>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title">Revenue by Rating</div>
+          <div class="wc-sub">Which rating tier generates the most income</div>
+          <canvas id="ratingChart" height="180"></canvas>
+          <div class="rating-legend">
+            <div class="rl-item"><div class="rl-dot" style="background:#1ab849"></div>G — All ages</div>
+            <div class="rl-item"><div class="rl-dot" style="background:#4facfe"></div>PG — Parental guidance</div>
+            <div class="rl-item"><div class="rl-dot" style="background:#ff9445"></div>PG-13 — 13 and above</div>
+            <div class="rl-item"><div class="rl-dot" style="background:#ff4757"></div>R — 17 and above</div>
+            <div class="rl-item"><div class="rl-dot" style="background:#a05adc"></div>NC-17 — 18 and above</div>
+          </div>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Top Genres by Revenue</div>
+          <div class="wc-sub">Revenue from top categories in your DB</div>
+          <div id="genrelist"><div class="skeleton" style="height:120px"></div></div>
+        </div>
+      </div>
+      <div class="section-title">Explore Features</div>
+      <div class="fc-grid">
+        <div class="fc" onclick="showPage('content',document.querySelectorAll('.nav-item')[1])">
+          <div class="fc-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="#a89bff" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div class="fc-title">Content Performance</div>
+          <div class="fc-desc">Top & bottom films, dead stock, and rating profitability.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+        <div class="fc" onclick="showPage('genre',document.querySelectorAll('.nav-item')[2])">
+          <div class="fc-icon teal"><svg viewBox="0 0 24 24" fill="none" stroke="#00d4a8" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <div class="fc-title">Genre & Audience Taste</div>
+          <div class="fc-desc">Which genres drive rentals and revenue from live data.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+        <div class="fc" onclick="showPage('rental',document.querySelectorAll('.nav-item')[3])">
+          <div class="fc-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="#ff9445" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="fc-title">Rental Behavior</div>
+          <div class="fc-desc">Late returns, peak days, and duration from real rental data.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+        <div class="fc" onclick="showPage('actor',document.querySelectorAll('.nav-item')[4])">
+          <div class="fc-icon pink"><svg viewBox="0 0 24 24" fill="none" stroke="#ff6b9d" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <div class="fc-title">Actor & Cast Power</div>
+          <div class="fc-desc">Which actors drive the most rentals and revenue.</div>
+          <span class="fc-badge">Live DB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONTENT PERFORMANCE ── -->
+    <div class="page-section" id="page-content">
+      <div class="feat-hero">
+        <div><h2>Content Performance</h2><p>Top films, dead stock, and rating profitability from your dvdrental DB</p></div>
+        <button class="back-btn" onclick="showPage('overview',document.querySelectorAll('.nav-item')[0])">← Back to Summary</button>
+      </div>
+      <div class="filter-bar">
+        <select class="filter-select" onchange="filterContent(this.value)">
+          <option value="all">All Ratings</option>
+          <option value="G">G</option>
+          <option value="PG">PG</option>
+          <option value="PG-13">PG-13</option>
+          <option value="R">R</option>
+          <option value="NC-17">NC-17</option>
+        </select>
+        <select class="filter-select" onchange="sortContent(this.value)">
+          <option value="revenue">Sort by Revenue</option>
+          <option value="rentals">Sort by Rentals</option>
+          <option value="title">Sort by Title</option>
+        </select>
+      </div>
+      <div class="row-2b" style="margin-bottom:16px">
+        <div class="wc">
+          <div class="wc-title">Revenue by Rating</div>
+          <div class="wc-sub">Profitability across content ratings</div>
+          <canvas id="contentRatingChart" height="200"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Dead Stock Analysis</div>
+          <div class="wc-sub">Films that have never been rented</div>
+          <canvas id="deadStockChart" height="200"></canvas>
+        </div>
+      </div>
+      <div class="wc">
+        <div class="wc-title">Film Performance Table</div>
+        <div class="wc-sub">Top films ranked by revenue with rental counts (live from dvdrental)</div>
+        <div class="tbl-wrap" id="contentTable"><div class="skeleton" style="height:200px;border-radius:0"></div></div>
+      </div>
+    </div>
+
+    <!-- ── GENRE ── -->
+    <div class="page-section" id="page-genre">
+      <div class="feat-hero">
+        <div><h2>Genre &amp; Audience Taste</h2><p>Which genres drive rentals and revenue from your real data</p></div>
+        <button class="back-btn" onclick="showPage('overview',document.querySelectorAll('.nav-item')[0])">← Back to Summary</button>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title">Rentals by Genre</div>
+          <div class="wc-sub">Transaction volume per category</div>
+          <canvas id="genreRentalsChart" height="220"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Revenue by Genre</div>
+          <div class="wc-sub">Earnings per category</div>
+          <canvas id="genreRevenueChart" height="220"></canvas>
+        </div>
+      </div>
+      <div class="wc" style="margin-top:16px">
+        <div class="wc-title">Genre Breakdown Table</div>
+        <div class="wc-sub">Full category stats with rental count and revenue</div>
+        <div class="tbl-wrap" id="genreTable"></div>
+      </div>
+    </div>
+
+    <!-- ── RENTAL BEHAVIOR ── -->
+    <div class="page-section" id="page-rental">
+      <div class="feat-hero">
+        <div><h2>Rental Behavior &amp; Late Returns</h2><p>Late returns, peak rental periods, and duration patterns from real data</p></div>
+        <button class="back-btn" onclick="showPage('overview',document.querySelectorAll('.nav-item')[0])">← Back to Summary</button>
+      </div>
+      <div class="cards-row" style="grid-template-columns:repeat(3,1fr)">
+        <div class="sc purple"><div class="sc-label">On-Time Returns</div><div class="sc-value" id="rb-ontime">—</div><div class="sc-sub">Returned within due date</div><div class="sc-wm">✓</div></div>
+        <div class="sc orange"><div class="sc-label">Late Returns</div><div class="sc-value" id="rb-late">—</div><div class="sc-sub">Returned after due date</div><div class="sc-wm">!</div></div>
+        <div class="sc teal"><div class="sc-label">Late Return Rate</div><div class="sc-value" id="rb-rate">—</div><div class="sc-sub">Of all completed rentals</div><div class="sc-wm">%</div></div>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title">Rentals by Day of Week</div>
+          <div class="wc-sub">Which days see the most rental activity</div>
+          <canvas id="dayChart" height="200"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Rental Duration Distribution</div>
+          <div class="wc-sub">How many days customers keep films</div>
+          <canvas id="durationChart" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ACTOR & CAST ── -->
+    <div class="page-section" id="page-actor">
+      <div class="feat-hero">
+        <div><h2>Actor &amp; Cast Star Power</h2><p>Which actors and casts drive the most rentals and revenue</p></div>
+        <button class="back-btn" onclick="showPage('overview',document.querySelectorAll('.nav-item')[0])">← Back to Summary</button>
+      </div>
+      <div class="row-2b">
+        <div class="wc">
+          <div class="wc-title">Top Actors by Film Count</div>
+          <div class="wc-sub">Most appearances in the catalog</div>
+          <canvas id="actorFilmsChart" height="220"></canvas>
+        </div>
+        <div class="wc">
+          <div class="wc-title">Top Actors by Revenue</div>
+          <div class="wc-sub">Estimated revenue driven per actor</div>
+          <canvas id="actorRevenueChart" height="220"></canvas>
+        </div>
+      </div>
+      <div class="wc" style="margin-top:16px">
+        <div class="wc-title">Actor Leaderboard</div>
+        <div class="wc-sub">Top 10 actors by revenue (live from dvdrental)</div>
+        <div class="tbl-wrap" id="actorTable"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ═══ AI PANEL ═══ -->
+<aside id="ai-panel">
+  <div class="ai-header">
+    <div class="ai-header-top">
+      <div class="ai-avatar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/></svg>
+      </div>
+      <div>
+        <div class="ai-title">Gemini AI Analyst</div>
+        <div class="ai-status"><div class="ai-dot"></div>Powered by Google Gemini</div>
+      </div>
+    </div>
+    <div class="ai-desc">Ask me anything about your dvdrental data — trends, insights, or business recommendations.</div>
+  </div>
+
+  <!-- GEMINI BADGE -->
+  <div class="gemini-badge">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20A10 10 0 0 1 12 2z"/><path d="M12 6v6l4 2"/></svg>
+    Connected · Gemini 2.0 Flash · Live DB context
+  </div>
+
+  <div class="ai-quick">
+    <div class="ai-quick-label">Quick Prompts</div>
+    <div class="qp-grid">
+      <button class="qp" onclick="sendQuick('Which genre generates the most revenue and why might that be?')">📊 Which genre makes the most revenue?</button>
+      <button class="qp" onclick="sendQuick('What does a ~20% late return rate mean for the business? Give 3 recommendations.')">⏰ What does 20% late return rate mean?</button>
+      <button class="qp" onclick="sendQuick('Analyze dead stock films — what strategy should be applied to them?')">🎬 How to handle dead stock films?</button>
+      <button class="qp" onclick="sendQuick('Which rating category is most profitable and why?')">⭐ Which rating is most profitable?</button>
+      <button class="qp" onclick="sendQuick('Give me a full executive summary and 3 actionable recommendations based on this dvdrental dashboard.')">📋 Executive summary & recommendations</button>
+    </div>
+  </div>
+
+  <div class="ai-nav-section">
+    <div class="ai-nav-label">Jump to page &amp; ask</div>
+    <div class="ai-nav-items">
+      <div class="ai-nav-item" onclick="goAndAsk('content','Analyze the content performance — which films should be promoted more?')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Analyze content performance
+      </div>
+      <div class="ai-nav-item" onclick="goAndAsk('genre','What genres should we add more titles to?')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8.56 2.75c4.37 6.03 6.02 9.42 8.03 17.72"/></svg>
+        Genre & audience insights
+      </div>
+      <div class="ai-nav-item" onclick="goAndAsk('rental','What is causing the late return rate and how can it be reduced?')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Rental behavior analysis
+      </div>
+      <div class="ai-nav-item" onclick="goAndAsk('actor','Which actors have the best return on catalog investment?')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Actor star power ROI
+      </div>
+    </div>
+  </div>
+
+  <div class="ai-chat" id="ai-chat">
+    <div class="msg ai">
+      <div class="msg-bubble">
+        Hello! I'm your <b>Gemini AI Analyst</b> connected to your real <b>dvdrental PostgreSQL database</b>.<br><br>
+        I'm ready to go — ask me anything about your rental data using the quick prompts above or type below!
+      </div>
+      <div class="msg-time">Just now</div>
+    </div>
+  </div>
+
+  <div class="typing-indicator" id="typing-indicator">
+    <div class="typing-bubble">
+      <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+    </div>
+  </div>
+
+  <div class="ai-input-area">
+    <div class="ai-input-wrap">
+      <textarea class="ai-textarea" id="ai-input" placeholder="Ask about your data…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="ai-send" onclick="sendMessage()" title="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+    <div class="ai-hint">Powered by Google Gemini 2.0 Flash · Live dvdrental context</div>
+  </div>
+</aside>
+
+<script>
+// ═══════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════
+const API_BASE = 'http://localhost:5000/api';
+const COLORS = {
+  purple:'#a89bff', teal:'#00d4a8', orange:'#ff9445',
+  blue:'#4facfe', pink:'#ff6b9d', red:'#ff4757', yellow:'#ffd32a', green:'#1ab849'
+};
+const RATING_COLORS = {'G':'#1ab849','PG':'#4facfe','PG-13':'#ff9445','R':'#ff4757','NC-17':'#a05adc'};
+const GENRE_PALETTE = ['#a89bff','#00d4a8','#ff9445','#4facfe','#ff6b9d','#ffd32a','#ff4757','#1ab849'];
+const CH_GRID = {color:'rgba(255,255,255,0.05)'};
+const CH_TEXT = '#9da3c8';
+
+// ═══════════════════════════════════════════
+// DATE
+// ═══════════════════════════════════════════
+document.getElementById('date-chip').textContent =
+  new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+const pageMap = {
+  overview:{id:'page-overview',title:'Executive Summary',sub:'Movie rental performance at a glance · Live from dvdrental'},
+  content:{id:'page-content',title:'Content Performance',sub:'Top & bottom films, ROI analysis and profitability · Live DB'},
+  genre:{id:'page-genre',title:'Genre & Audience Taste',sub:'Category preferences and audience insights · Live DB'},
+  rental:{id:'page-rental',title:'Rental Behavior & Late Returns',sub:'Patterns, duration, and late return analysis · Live DB'},
+  actor:{id:'page-actor',title:'Actor & Cast Star Power',sub:'Which actors drive rentals and revenue · Live DB'},
+};
+function showPage(key, navEl){
+  document.querySelectorAll('.page-section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const pm = pageMap[key];
+  document.getElementById(pm.id).classList.add('active');
+  if(navEl) navEl.classList.add('active');
+  document.getElementById('page-title-text').textContent = pm.title;
+  document.getElementById('page-sub-text').textContent = pm.sub;
+  document.querySelector('.content').scrollTop = 0;
+}
+function goAndAsk(page, msg){
+  const keys = ['overview','content','genre','rental','actor'];
+  showPage(page, document.querySelectorAll('.nav-item')[keys.indexOf(page)]);
+  setTimeout(()=>sendQuick(msg), 300);
+}
+
+// ═══════════════════════════════════════════
+// DB STATUS
+// ═══════════════════════════════════════════
+function setDbStatus(state, text){
+  const el = document.getElementById('db-status');
+  el.className = `db-status ${state}`;
+  document.getElementById('db-status-text').textContent = text;
+}
+
+// ═══════════════════════════════════════════
+// FETCH HELPER
+// ═══════════════════════════════════════════
+async function apiFetch(endpoint){
+  const res = await fetch(API_BASE + endpoint);
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ═══════════════════════════════════════════
+// CHART INSTANCES (for destroy/recreate)
+// ═══════════════════════════════════════════
+const charts = {};
+function makeChart(id, config){
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id).getContext('2d'), config);
+}
+
+// ═══════════════════════════════════════════
+// LOAD OVERVIEW
+// ═══════════════════════════════════════════
+async function loadOverview(){
+  try{
+    const [ov, monthly, top5, ratings, genres] = await Promise.all([
+      apiFetch('/overview'),
+      apiFetch('/monthly_revenue'),
+      apiFetch('/top_films'),
+      apiFetch('/revenue_by_rating'),
+      apiFetch('/top_genres'),
+    ]);
+    setDbStatus('ok', 'Connected · dvdrental');
+
+    // Stat cards
+    document.getElementById('ov-revenue').textContent = '$' + Number(ov.total_revenue).toLocaleString();
+    document.getElementById('ov-rentals').textContent = Number(ov.total_rentals).toLocaleString();
+    document.getElementById('ov-films').textContent = Number(ov.total_films).toLocaleString();
+    document.getElementById('ov-customers').textContent = Number(ov.active_customers).toLocaleString();
+    document.getElementById('ov-avg-rental').textContent = '$' + ov.avg_per_rental;
+    document.getElementById('ov-avg-rental-hint').textContent = `Based on ${ov.total_rentals.toLocaleString()} rentals`;
+    document.getElementById('ov-avg-film').textContent = '$' + ov.avg_per_film;
+    document.getElementById('ov-dead').textContent = ov.dead_stock;
+
+    // Monthly trend chart
+    makeChart('trendChart',{
+      type:'line',
+      data:{labels:monthly.map(r=>r.month),datasets:[{
+        data:monthly.map(r=>parseFloat(r.revenue)),fill:true,
+        borderColor:'#7c6af7',borderWidth:2.5,
+        backgroundColor:'rgba(124,106,247,0.08)',
+        pointBackgroundColor:'#7c6af7',pointRadius:4,tension:.35
+      }]},
+      options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:v=>'$'+v.formattedValue}}},
+        scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:10}}},
+                y:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:10},callback:v=>'$'+Number(v).toLocaleString()}}}}
+    });
+
+    // Top 5 films list
+    const t5el = document.getElementById('top5list');
+    const mx = parseFloat(top5[0].revenue);
+    const palette = [COLORS.purple,COLORS.teal,COLORS.orange,COLORS.blue,COLORS.pink];
+    t5el.innerHTML = top5.map((f,i)=>{
+      const pct = Math.round(parseFloat(f.revenue)/mx*100);
+      const c = palette[i];
+      return `<div class="ms-item">
+        <div class="ms-dot" style="background:${c}"></div>
+        <div style="flex:1;min-width:0"><div class="ms-name">${f.title}</div><div class="ms-count">${f.rentals} rentals</div></div>
+        <div class="ms-bar-wrap"><div class="ms-bar" style="width:${pct}%;background:${c}"></div></div>
+        <div class="ms-amt" style="color:${c}">$${Math.round(parseFloat(f.revenue))}</div>
+      </div>`;
+    }).join('');
+
+    // Rating donut
+    makeChart('ratingChart',{
+      type:'doughnut',
+      data:{labels:ratings.map(r=>r.rating),
+            datasets:[{data:ratings.map(r=>parseFloat(r.revenue)),
+                       backgroundColor:ratings.map(r=>RATING_COLORS[r.rating]||'#888'),borderWidth:0,hoverOffset:6}]},
+      options:{responsive:true,cutout:'60%',plugins:{legend:{position:'right',labels:{color:CH_TEXT,font:{size:11},boxWidth:12,padding:14}},
+        tooltip:{callbacks:{label:v=>' $'+Number(v.raw).toLocaleString()}}}}
+    });
+
+    // Genre list
+    const glel = document.getElementById('genrelist');
+    const gmx = parseFloat(genres[0].revenue);
+    glel.innerHTML = genres.map((g,i)=>{
+      const c = GENRE_PALETTE[i];
+      const pct = Math.round(parseFloat(g.revenue)/gmx*100);
+      return `<div class="ms-item">
+        <div class="ms-dot" style="background:${c}"></div>
+        <div style="flex:1;min-width:0"><div class="ms-name">${g.category}</div><div class="ms-count">${g.rentals} rentals</div></div>
+        <div class="ms-bar-wrap"><div class="ms-bar" style="width:${pct}%;background:${c}"></div></div>
+        <div class="ms-amt" style="color:${c}">$${Number(g.revenue).toLocaleString()}</div>
+      </div>`;
+    }).join('');
+
+    // Store for AI context
+    window.dashData = {ov, monthly, top5, ratings, genres};
+
+  } catch(e){
+    setDbStatus('err', 'DB Error — is Flask running?');
+    console.error(e);
+  }
+}
+
+// ═══════════════════════════════════════════
+// LOAD CONTENT PAGE
+// ═══════════════════════════════════════════
+let filmData = [], currentFilter = 'all', currentSort = 'revenue';
+async function loadContent(){
+  if(filmData.length) return;
+  const [films, ds] = await Promise.all([apiFetch('/film_table'), apiFetch('/dead_stock')]);
+  filmData = films;
+  renderContentTable();
+
+  // Content rating bar
+  const ratingData = await apiFetch('/revenue_by_rating');
+  makeChart('contentRatingChart',{
+    type:'bar',
+    data:{labels:ratingData.map(r=>r.rating),datasets:[{label:'Revenue',data:ratingData.map(r=>parseFloat(r.revenue)),backgroundColor:ratingData.map(r=>RATING_COLORS[r.rating]||'#888'),borderRadius:6}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+Number(v).toLocaleString()}}}}
+  });
+
+  // Dead stock pie
+  makeChart('deadStockChart',{
+    type:'pie',
+    data:{labels:['Rented Films','Dead Stock'],datasets:[{data:[ds.rented, ds.by_rating.reduce((a,r)=>a+r.count,0)],backgroundColor:['#7c6af7','#ff4757'],borderWidth:0}]},
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:CH_TEXT,font:{size:11},boxWidth:12}}}}
+  });
+}
+
+function renderContentTable(){
+  let data = [...filmData];
+  if(currentFilter !== 'all') data = data.filter(f=>f.rating===currentFilter);
+  if(currentSort==='rentals') data.sort((a,b)=>b.rentals-a.rentals);
+  else if(currentSort==='title') data.sort((a,b)=>a.title.localeCompare(b.title));
+  const bc = {G:'g',PG:'pg','PG-13':'pg13',R:'r','NC-17':'nc17'};
+  document.getElementById('contentTable').innerHTML=`<table>
+    <thead><tr><th>#</th><th>Film Title</th><th>Rating</th><th>Rentals</th><th>Revenue</th></tr></thead>
+    <tbody>${data.map((f,i)=>`<tr>
+      <td class="val">${i+1}</td><td class="val">${f.title}</td>
+      <td><span class="badge ${bc[f.rating]||''}">${f.rating}</span></td>
+      <td>${f.rentals}</td>
+      <td class="val">$${Number(f.revenue).toFixed(2)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+function filterContent(v){currentFilter=v;renderContentTable();}
+function sortContent(v){currentSort=v;renderContentTable();}
+
+// ═══════════════════════════════════════════
+// LOAD GENRE PAGE
+// ═══════════════════════════════════════════
+let genreLoaded = false;
+async function loadGenre(){
+  if(genreLoaded) return;
+  genreLoaded = true;
+  const genres = await apiFetch('/top_genres');
+
+  makeChart('genreRentalsChart',{
+    type:'bar',
+    data:{labels:genres.map(g=>g.category),datasets:[{label:'Rentals',data:genres.map(g=>g.rentals),backgroundColor:GENRE_PALETTE,borderRadius:6}]},
+    options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT}}}}
+  });
+  makeChart('genreRevenueChart',{
+    type:'bar',
+    data:{labels:genres.map(g=>g.category),datasets:[{label:'Revenue',data:genres.map(g=>parseFloat(g.revenue)),backgroundColor:GENRE_PALETTE,borderRadius:6}]},
+    options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+Number(v).toLocaleString()}},y:{grid:CH_GRID,ticks:{color:CH_TEXT}}}}
+  });
+
+  document.getElementById('genreTable').innerHTML=`<table>
+    <thead><tr><th>Genre</th><th>Rentals</th><th>Revenue</th><th>Avg/Rental</th></tr></thead>
+    <tbody>${genres.map(g=>`<tr>
+      <td class="val">${g.category}</td><td>${g.rentals}</td>
+      <td class="val">$${Number(g.revenue).toLocaleString()}</td>
+      <td>$${(parseFloat(g.revenue)/g.rentals).toFixed(2)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ═══════════════════════════════════════════
+// LOAD RENTAL BEHAVIOR PAGE
+// ═══════════════════════════════════════════
+let rentalLoaded = false;
+async function loadRental(){
+  if(rentalLoaded) return;
+  rentalLoaded = true;
+  const data = await apiFetch('/rental_behavior');
+
+  const lateNum = parseInt(data.late.late);
+  const totalNum = parseInt(data.late.total);
+  const ontime = totalNum - lateNum;
+  const lateRate = ((lateNum/totalNum)*100).toFixed(2);
+
+  document.getElementById('rb-ontime').textContent = ontime.toLocaleString();
+  document.getElementById('rb-late').textContent = lateNum.toLocaleString();
+  document.getElementById('rb-rate').textContent = lateRate + '%';
+
+  const dayOrder = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayMap = {};
+  data.days.forEach(d=>{dayMap[d.day]=d.rentals;});
+  const dayVals = dayOrder.map(d=>dayMap[d]||0);
+  const peakIdx = dayVals.indexOf(Math.max(...dayVals));
+  const dayColors = dayVals.map((_,i)=>i===peakIdx?'#7c6af7':'#a89bff');
+
+  makeChart('dayChart',{
+    type:'bar',
+    data:{labels:dayOrder,datasets:[{data:dayVals,backgroundColor:dayColors,borderRadius:6}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT}}}}
+  });
+
+  const durLabels = data.duration.map(d=>d.days>=7?'7+ days':d.days+' day'+(d.days>1?'s':''));
+  makeChart('durationChart',{
+    type:'bar',
+    data:{labels:durLabels,datasets:[{data:data.duration.map(d=>d.rentals),backgroundColor:'#00d4a8',borderRadius:6}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT}},y:{grid:CH_GRID,ticks:{color:CH_TEXT}}}}
+  });
+}
+
+// ═══════════════════════════════════════════
+// LOAD ACTOR PAGE
+// ═══════════════════════════════════════════
+let actorLoaded = false;
+async function loadActors(){
+  if(actorLoaded) return;
+  actorLoaded = true;
+  const actors = await apiFetch('/actors');
+
+  makeChart('actorFilmsChart',{
+    type:'bar',
+    data:{labels:actors.slice(0,8).map(a=>a.name.split(' ')[0]),datasets:[{data:actors.slice(0,8).map(a=>a.films),backgroundColor:'#ff9445',borderRadius:6}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:10}}},y:{grid:CH_GRID,ticks:{color:CH_TEXT}}}}
+  });
+  makeChart('actorRevenueChart',{
+    type:'bar',
+    data:{labels:actors.slice(0,8).map(a=>a.name.split(' ')[0]),datasets:[{data:actors.slice(0,8).map(a=>parseFloat(a.revenue)||0),backgroundColor:'#ff6b9d',borderRadius:6}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:CH_GRID,ticks:{color:CH_TEXT,font:{size:10}}},y:{grid:CH_GRID,ticks:{color:CH_TEXT,callback:v=>'$'+Number(v).toLocaleString()}}}}
+  });
+
+  document.getElementById('actorTable').innerHTML=`<table>
+    <thead><tr><th>#</th><th>Actor</th><th>Films</th><th>Rentals</th><th>Revenue</th></tr></thead>
+    <tbody>${actors.map((a,i)=>`<tr>
+      <td class="val">${i+1}</td><td class="val">${a.name}</td>
+      <td>${a.films}</td><td>${Number(a.rentals).toLocaleString()}</td>
+      <td class="val">$${Number(a.revenue).toLocaleString()}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// Override showPage to lazy-load page data
+const _origShow = showPage;
+function showPage(key, navEl){
+  _origShow(key, navEl);
+  if(key==='content') loadContent();
+  if(key==='genre') loadGenre();
+  if(key==='rental') loadRental();
+  if(key==='actor') loadActors();
+}
+
+// ═══════════════════════════════════════════
+// GEMINI AI ANALYST
+// ═══════════════════════════════════════════
+const GEMINI_KEY = 'AIzaSyDvF6EWZ2o6TuhzfbNFlyQviLv6aj-Ms88';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+let chatHistory = [];
+
+function buildSystemContext(){
+  const d = window.dashData || {};
+  const ov = d.ov || {};
+  const top5 = (d.top5||[]).map(f=>`${f.title}: $${f.revenue} (${f.rentals} rentals)`).join(', ');
+  const ratings = (d.ratings||[]).map(r=>`${r.rating}: $${r.revenue}`).join(' | ');
+  const genres = (d.genres||[]).map(g=>`${g.category}: ${g.rentals} rentals, $${g.revenue}`).join(' | ');
+  return `You are an AI analyst for a Movie Rental Analytics Dashboard connected to a LIVE dvdrental PostgreSQL database.
+
+LIVE DATABASE SUMMARY:
+- Total Revenue: $${ov.total_revenue||'?'} | Total Rentals: ${ov.total_rentals||'?'} | Film Catalog: ${ov.total_films||'?'} | Active Customers: ${ov.active_customers||'?'}
+- Avg Revenue/Rental: $${ov.avg_per_rental||'?'} | Avg Revenue/Film: $${ov.avg_per_film||'?'} | Dead Stock (never rented): ${ov.dead_stock||'?'} films
+- Top 5 Films: ${top5||'loading...'}
+- Rating Revenue: ${ratings||'loading...'}
+- Top Genres: ${genres||'loading...'}
+
+This data is LIVE from the real dvdrental PostgreSQL database (not mock data).
+Respond concisely and insightfully. Use bullet points where helpful. Reference specific numbers. Keep responses under 200 words unless detailed analysis is requested. Be direct and business-focused.`;
+}
+
+function getTime(){
+  return new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+}
+
+function appendMsg(role, html){
+  const chat = document.getElementById('ai-chat');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `<div class="msg-bubble">${html}</div><div class="msg-time">${getTime()}</div>`;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function showTyping(show){
+  const t = document.getElementById('typing-indicator');
+  t.classList.toggle('show', show);
+  if(show) document.getElementById('ai-chat').scrollTop = 99999;
+}
+
+async function callGemini(userMsg){
+  chatHistory.push({role:'user', parts:[{text: userMsg}]});
+  showTyping(true);
+  try{
+    const body = {
+      system_instruction:{parts:[{text: buildSystemContext()}]},
+      contents: chatHistory,
+      generationConfig:{maxOutputTokens:500, temperature:0.7}
+    };
+    const res = await fetch(GEMINI_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    showTyping(false);
+    if(data.candidates && data.candidates[0]){
+      const txt = data.candidates[0].content.parts[0].text;
+      chatHistory.push({role:'model', parts:[{text: txt}]});
+      const formatted = txt
+        .replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')
+        .replace(/\*(.*?)\*/g,'<i>$1</i>')
+        .replace(/^[-•]\s(.+)/gm,'<span style="display:block;padding-left:10px;margin-top:2px">· $1</span>')
+        .replace(/\n/g,'<br>');
+      appendMsg('ai', formatted);
+    } else if(data.error){
+      appendMsg('ai', `❌ Gemini error: ${data.error.message}`);
+    } else {
+      appendMsg('ai','Sorry, no response received. Please try again.');
+    }
+  } catch(err){
+    showTyping(false);
+    appendMsg('ai','❌ Network error. See console for details.');
+    console.error(err);
+  }
+}
+
+function sendMessage(){
+  const inp = document.getElementById('ai-input');
+  const msg = inp.value.trim();
+  if(!msg) return;
+  appendMsg('user', msg);
+  inp.value = '';
+  inp.style.height = 'auto';
+  callGemini(msg);
+}
+
+function sendQuick(msg){
+  appendMsg('user', msg);
+  callGemini(msg);
+}
+
+function handleKey(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el){
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+loadOverview();
+</script>
+</body>
+</html>
